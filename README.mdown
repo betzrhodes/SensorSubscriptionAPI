@@ -1,15 +1,15 @@
-Sensor API Classes
+##Sensor API Classes
 
 Used to create a pub/sub stream of sensor data between your device and agent.  The api supports subscriptions to streams and events.  Communication is based on subscription commands. These are unique strings used to identify each subscription.   In the example code I have used the name of the sensor instance underscore description of the subscription (ex - "nora_tempReadings"), however the string can be anything as long as no other subscription command is the same.
 
-Dependencies
+##Dependencies
     sensor classes for the sensors on your device
     bullwinkle class
 
 
-Agent Side API
+##Agent Side API
 
-List of functions
+###List of functions
     addSensor
     getSensorInfo
     setBroadcastCallback
@@ -26,7 +26,7 @@ List of functions
     unsubscribeFromAll
 
 
-Setup
+###Setup
 
     Initialize Class
         parameter 1 - reading interval
@@ -99,7 +99,7 @@ Setup
             api.setBroadcastCallback(printData);
 
 
-Updating
+###Updating
 
     updateReadingInterval
         parameter 1 - new reading interval
@@ -124,7 +124,7 @@ Updating
             api.updateEventParams(0, "nora_tempThermostat", {"low": 28})
 
 
-Subscription
+###Subscription
 
     subscribeToStreams
         parameter 1 - (optional) array of sensor IDs
@@ -183,4 +183,4 @@ Subscription
             api.unsubscribeFromAll();
 
 
-Device Side API
+##Device Side API

@@ -187,50 +187,51 @@ Used to create a pub/sub stream of sensor data between your device and agent.  T
 
 ###Setup
 
-    Setup will vary based on the sensors used.  I'm going to include the setup for the temperature sensor on the nora.
+    Setup will vary based on the sensors used.  I'm going to include code examples for the setup of the temperature sensor on the nora.
 
-    Basic Code for Nora Sensor Setup:
-        const TMP1x2_ADDR = 0x92;
-        hardware.pinA.configure(DIGITAL_IN);
-        hardware.pinB.configure(DIGITAL_IN);
-        hardware.pinC.configure(DIGITAL_IN);
-        hardware.pinD.configure(DIGITAL_IN);
-        hardware.pinE.configure(DIGITAL_IN);
-        hardware.pin1.configure(DIGITAL_IN_WAKEUP);
-        i2c         <- hardware.i2c89;
-        i2c.configure(CLOCK_SPEED_400_KHZ);
+    Basic configuration for Nora Sensor:
+        Code Example:
+            const TMP1x2_ADDR = 0x92;
+            hardware.pinA.configure(DIGITAL_IN);
+            hardware.pinB.configure(DIGITAL_IN);
+            hardware.pinC.configure(DIGITAL_IN);
+            hardware.pinD.configure(DIGITAL_IN);
+            hardware.pinE.configure(DIGITAL_IN);
+            hardware.pin1.configure(DIGITAL_IN_WAKEUP);
+            i2c         <- hardware.i2c89;
+            i2c.configure(CLOCK_SPEED_400_KHZ);
 
-    Setup the variables to store initialized sensors, since we only want to initialize the sensors we are acutally subscribed to.  For some reason we needed to initialize the magnitometer for interupts to work.
-    Code Example:
-        noraTemp <- null;
-        mag <- LIS3MDL(i2c);
+    Setup the variables to store initialized sensors, since we only want to initialize the sensors we are acutally subscribed to.  Note - on nora we needed to initialize the magnitometer for interupts to work.
+        Code Example:
+            noraTemp <- null;
+            mag <- LIS3MDL(i2c);
 
     Custom functions for sensors:
-        Initialize Code:
+        I've written some functions so the sensors are initialized when I want and have the parameters the agent has programmed.  Any behavior you want to define that is not in the class can customized in this step.
+        Code Example:
+            //initialize nora temp sensor
             function initializeTemp() {
                 if (!noraTemp) { noraTemp <- TMP1x2(i2c, TMP1x2_ADDR, hardware.pinE); }
             }
-        Event Set Parameters Code:
+            //set event parameters
             function setUpTempThermostat(params) {
                 initializeTemp();
                 if("low" in params) {noraTemp.setLowThreshold(params.low)};
                 if("high" in params) {noraTemp.setHighThreshold(params.high)};
             }
-        Turn off event Code:
+            //turn off event.  currently this is not working, ideally the code here would stop event from firing.
             function resetEvents() {
-                if(noraTemp) { noraTemp.reset(); }  - this is not working, ideally the code here would stop event from firing. - may need to just turn off digital wakeup pin and turn on when we subscribe to event??
+                if(noraTemp) { noraTemp.reset(); }
             }
 
         Agent/Device Communication table:
             keys are the subscription command
-            values are the function to be run when we subscribe to stream/event
+            values are the function to be run when we subscribe to stream/event. For streams this function should return a reading.  For event this function should set the parameters for the event.
                 Code Example:
-                    sensorSubscriptionFunctionsByCommand <- { "nora_tempReadings" : function() {
-                                                                                                initializeTemp();
-                                                                                                return noraTemp.readTempC() },
-                                                                                            "nora_tempThermostat" : function(params) {
-                                                                                                setUpTempThermostat(params); },
-                                                                                         }
+                    sensorSubscriptionFunctionsByCommand <- {
+                            "nora_tempReadings" : function() { initializeTemp(); return noraTemp.readTempC(); },
+                            "nora_tempThermostat" : function(params) { setUpTempThermostat(params); },
+                    }
 
         Initialize Device API class
             parameter 1 - name
@@ -238,9 +239,22 @@ Used to create a pub/sub stream of sensor data between your device and agent.  T
             parameter 2 - Agent/Device Communication table
                                     The table of command named and functions to be run when we subscribe to a stream or event.
             parameter 3 - instance of bullwinkle class
-                                Bullwinkle is used for agent device communication, and is required for the sensor api to function.
+                                    Bullwinkle is used for agent device communication, and is required for the sensor api to function.
             parameter 4 - (optional) function to turn off events
             Code Example:
                 bullwinkle <- Bullwinkle();
                 api <- deviceSideSensorAPI("nora", sensorSubscriptionFunctionsByCommand, bullwinkle, resetEvents);
 
+
+        Set up event handling
+            For each event we need some additional set up.  "setUpEvent"  takes in the additional info for each event.
+            parameter 1 - event
+                                    Subscription command.
+            parameter 2 - pin
+                                    the interrupt pin for the event
+            parameter 3 - polarity
+                                    polarity of the pin when the event is triggered
+            parameter 4 - function
+                                    the function that will run when the event is triggered.  should return data or message for end user
+            Code Example:
+                api.setUpEvent("nora_tempThermostat", "pinE", 0, function(){ initializeTemp(); return noraTemp.readTempC(); });

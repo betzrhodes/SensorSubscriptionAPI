@@ -876,17 +876,25 @@ class AgentSideSensorAPI {
         _bullwinkle.on("ack", _successfulCommunicationResponse.bindenv(this));
     }
 
-    function addSensorToSettings (type, availStreams=[], availEvents={}) {
-        //check params - type should be string, streams an array, events table
-        //if 2 params given adjust
-        local id = _sensorSettings.sensors.len();
-        _sensorSettings.sensors.push({ "sensorID" : id,
-                                      "type" : type,
-                                      "active" : false,
-                                      "availableStreams" : availStreams,
-                                      "availableEvents" : availEvents,
-                                      "activeStreams" : [],
-                                      "activeEvents" : {} });
+    function addSensor (type, availStreams=[], availEvents={}) {
+        if(typeof availStreams != "array" && typeof availStreams == "table") {
+            availEvents = availStreams;
+            availStreams = [];
+        }
+        if(typeof availEvents != "table" && typeof availEvents == "array") {
+            availStreams = availEvents;
+            availEvents = {};
+        }
+        if(typeof type == "string" && typeof availStreams == "array" && typeof availEvents == "table") {
+            local id = _sensorSettings.sensors.len();
+            _sensorSettings.sensors.push({ "sensorID" : id,
+                                          "type" : type,
+                                          "active" : false,
+                                          "availableStreams" : availStreams,
+                                          "availableEvents" : availEvents,
+                                          "activeStreams" : [],
+                                          "activeEvents" : {} });
+        }
     }
 
     function setBroadcastCallback(callback) {
@@ -908,6 +916,14 @@ class AgentSideSensorAPI {
             if( _sensorSettings.sensors[sID].activeStreams.len() > 0 && !(_sensorSettings.sensors[sID].active) ) {
                 _sensorSettings.sensors[sID].active = true;
             }
+            _settingsChanged = true;
+        }
+    }
+
+    function subscribeToAStream(sensorID, stream) {
+        if(stream in _sensorSettings.sensors[sensorID].availableStreams) {
+            _sensorSettings.sensors[sensorID].activeStreams.push(stream);
+            _sensorSettings.sensors[sID].active = true;
             _settingsChanged = true;
         }
     }
@@ -962,9 +978,22 @@ class AgentSideSensorAPI {
         }
     }
 
+    function unsubscribeFromAStream(sensorID, stream) {
+        if(stream in _sensorSettings.sensors[sensorID].activeStreams) {
+            _sensorSettings.sensors[sensorID].activeStreams.remove( _sensorSettings.sensors[sensorID].activeStreams.find(stream) );
+            if(_sensorSettings.sensors[sID].active && _sensorSettings.sensors[sID].activeStreams.len() == 0 && _sensorSettings.sensors[sID].activeEvents.len() == 0) {
+                _sensorSettings.sensors[sID].active = false;
+            }
+            _settingsChanged = true;
+        }
+    }
+
     function unsubscribeFromEvent(sensorID, event) {
         if(event in _sensorSettings.sensors[sensorID].activeEvents) {
             _sensorSettings.sensors[sensorID].activeEvents.rawdelete(event);
+            if(_sensorSettings.sensors[sID].active && _sensorSettings.sensors[sID].activeStreams.len() == 0 && _sensorSettings.sensors[sID].activeEvents.len() == 0) {
+                _sensorSettings.sensors[sID].active = false;
+            }
             _settingsChanged = true;
         }
     }
@@ -1057,7 +1086,7 @@ reportingInterval <- 60;
 //initialize our communication class
 api <- AgentSideSensorAPI(readingInterval, reportingInterval, bullwinkle);
 
-//generic print function to pass into broadcastCallback
+//generic print function to use as broadcastCallback
 function printData(data) {
     server.log(data);
 }
@@ -1070,7 +1099,7 @@ api.setBroadcastCallback(printData);
 //array of streams names/commands - this needs to be the same as the name/command in sensorSubscriptionFunctionsByCommand on the divice,
 //table with key of events/commands - this needs to be the same as the name/command in sensorSubscriptionFunctionsByCommand on the divice
 //and value a table of params - the key is the identifier to make parameters searchable on the divice side
-api.addSensorToSettings("temp", ["noraTemp_readings"], {"noraTemp_thermostat" : {"low": 29, "high": 30}});
+api.addSensor("temp", ["nora_tempReadings"], {"nora_tempThermostat" : {"low": 29, "high": 30}});
 
 
 //run time tests
@@ -1111,12 +1140,12 @@ server.log(api.getSensorInfo());
                                                     "sensorTail_themostat" : [ readings... ] },
                               },
           envSensorTailSettings: {  readingInterval: 5,
-                                  reportingInterval: 60,
-                                  subscriptions: {
-                                      "activeStreams" : [ "sensorTail_tempReadings",
-                                                          "sensorTail_humidReadings"],
+                                    reportingInterval: 60,
+                                    subscriptions: {
+                                        "activeStreams" : [ "sensorTail_tempReadings",
+                                                            "sensorTail_humidReadings"],
                                         "activeEvents" : { "sensorTail_themostat" : {low: 20, high: 30} }
-                                  }
+                                    }
                                  },
           eventPins: {"pinE":null},
         }

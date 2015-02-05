@@ -1,0 +1,186 @@
+Sensor API Classes
+
+Used to create a pub/sub stream of sensor data between your device and agent.  The api supports subscriptions to streams and events.  Communication is based on subscription commands. These are unique strings used to identify each subscription.   In the example code I have used the name of the sensor instance underscore description of the subscription (ex - "nora_tempReadings"), however the string can be anything as long as no other subscription command is the same.
+
+Dependencies
+    sensor classes for the sensors on your device
+    bullwinkle class
+
+
+Agent Side API
+
+List of functions
+    addSensor
+    getSensorInfo
+    setBroadcastCallback
+    updateReportingInterval
+    updateReadingInterval
+    updateEventParams
+    subscribeToStreams
+    subscribeToAStream
+    subscribeToEvent
+    subscribeToAll
+    unsubscribeFromStreams
+    unsubscribeFromAStream
+    unsubscribeFromEvent
+    unsubscribeFromAll
+
+
+Setup
+
+    Initialize Class
+        parameter 1 - reading interval
+                                This is the time in seconds that you want the imp to wake up and take readings.
+        parameter 2 - reporting interval
+                                This is the time in seconds that you want the imp to connect to the agent and send data.  This should be a multiple of the reading interval, since the reading interval is used to schedule imp wake ups.
+        parameter 3 - instance of bullwinkle class
+                                Bullwinkle is used for agent device communication, and is required for the sensor api to function.
+        Code Example:
+            readingInterval <- 15;
+            reportingInterval <- 60;
+            bullwinkle <- Bullwinkle();
+            api <- AgentSideSensorAPI(readingInterval, reportingInterval, bullwinkle);
+
+    getSensorInfo
+        When called it returns a json string containing the current settings.
+            agentID
+            readingInterval
+            reportingInterval
+            array of sensors  - each sensor is a table
+                    sensorID
+                    sensor type
+                    active - if the sensor is currently subscribed to
+                    an array of the streams (identified by the subscription command) subscribed to
+                        - this is an empty array if no streams are subscribed to
+                    a table of events (identified by the subscription command) subscribed to
+                        - this is an empty table if no events are subscribed to
+                    an array of all streams available to the sensor
+                        - this is an empty array if no streams are available
+                    a table of all events available to the sensor
+                        - this is an empty table if no events are available
+
+        Code Example:
+            { "agentID": "Yke-5UZ58oI1",
+              "readingInterval": 15,
+              "reportingInterval": 60,
+              "sensors": [ { "sensorID": 0,
+                                  "type": "temp",
+                                  "active": true,
+                                  "activeStreams": [ "nora_tempReadings" ],
+                                  "activeEvents": { "nora_tempThermostat": { "high": 30, "low": 29 } },
+                                  "availableStreams": [ "nora_tempReadings" ],
+                                  "availableEvents": { "nora_tempThermostat": { "high": 30, "low": 29 } },
+                                },
+                                { "sensorID": 1,
+                                  "type": "magnitometer",
+                                  "active": false,
+                                  "activeStreams": [ ],
+                                  "activeEvents": { },
+                                  "availableStreams": [ "nora_magReadings" ],
+                                  "availableEvents": { }
+                               } ]
+            }
+
+    addSensor
+        parameter 1 - sensor type
+                                This should be a string.  It is shown to users who request "getSensorInfo".
+        parameter 2 - (optional) an array of sensor streams.
+                                The sensor stream is the subscription command for the stream.  If the sensor only has one stream available, it should be passed in as an array with one element.
+        parameter 3 - (optional) a table of sensor events.
+                                The key is the subscription command for the event.  The value should be a table of parameters you would like to use to configure the event.
+        Code Example:
+            api.addSensor("temp", ["nora_tempReadings"], { "nora_tempThermostat" : {"low": 29, "high": 30} });
+
+    setBroadcastCallback
+        parameter 1 - a function
+                                This is the function that will be run every time the agent receives data from the device.
+        Code Example:
+            function printData(data) { server.log(data) };
+            api.setBroadcastCallback(printData);
+
+
+Updating
+
+    updateReadingInterval
+        parameter 1 - new reading interval
+                                Changes the reading interval to the new reading interval.  This change will not go into effect until the device connects to the agent.
+        Code Example:
+            api.updateReadingInterval(10);
+
+    updateReportingInterval
+        parameter 1 - new reporting interval
+                                Changes the reporting interval to the new reporting interval.  This change will not go into effect until the device connects to the agent.
+        Code Example:
+            api.updateReportingInterval(30);
+
+    updateEventParams
+        parameter 1 - sensor ID
+                                The ID of the sensor.  ID is in the table returned by calling "getSensorInfo".
+        parameter 2 - event
+                                Event is the subscription command for the event.
+        parameter 3 - new event parameters
+                                A table containing the new parameters for the event.
+        Code Example:
+            api.updateEventParams(0, "nora_tempThermostat", {"low": 28})
+
+
+Subscription
+
+    subscribeToStreams
+        parameter 1 - (optional) array of sensor IDs
+                                If given will subscribe to all streams for each sensor given.  If no parameter passed in will subscribe to all stream for all sensors.
+        Code Example:
+            api.subscribeToStreams();
+            api.subscribeToStreams( [0] );
+
+    subscribeToAStream
+        parameter 1 - sensor ID
+                                The ID of the sensor.  ID is in the table returned by calling "getSensorInfo".
+        parameter 2 - stream
+                                Stream is the subscription command for the stream.
+        Code Example:
+            api.subscribeToAStream(0, "nora_tempReadings");
+
+    subscribeToEvent
+        parameter 1 - sensor ID
+                                The ID of the sensor.  ID is in the table returned by calling "getSensorInfo".
+        parameter 2 - event
+                                Event is the subscription command for the event.
+        Code Example:
+            api.subscribeToEvent(0, "nora_tempThermostat");
+
+    subscribeToAll
+        Will subscribe to all events and streams for all sensors.
+        Code Example:
+            api.subscribeToAll();
+
+    unsubscribeFromStreams
+        parameter 1 - (optional) array of sensor IDs
+            If given will unsubscribe from all streams for each sensor given.  If no parameter passed in will unsubscribe from all stream for all sensors.
+        Code Example:
+            api.unsubscribeFromStreams();
+            api.unsubscribeFromStreams( [0] );
+
+    unsubscribeFromAStream
+        parameter 1 - sensor ID
+                                The ID of the sensor.  ID is in the table returned by calling "getSensorInfo".
+        parameter 2 - stream
+                                Stream is the subscription command for the stream.
+        Code Example:
+            api.unsubscribeFromAStream(0, "nora_tempReadings");
+
+    unsubscribeFromEvent
+        parameter 1 - sensor ID
+                                The ID of the sensor.  ID is in the table returned by calling "getSensorInfo".
+        parameter 2 - event
+                                Event is the subscription command for the event.
+        Code Example:
+            api.unsubscribeFromEvent(0, "nora_tempThermostat");
+
+    unsubscribeFromAll
+        Will unsubscribe from all events and streams for all sensors.
+        Code Example:
+            api.unsubscribeFromAll();
+
+
+Device Side API

@@ -1,260 +1,323 @@
-##Sensor API Classes
-
+#Sensor API Classes
 Used to create a pub/sub stream of sensor data between your device and agent.  The api supports subscriptions to streams and events.  Communication is based on subscription commands. These are unique strings used to identify each subscription.   In the example code I have used the name of the sensor instance underscore description of the subscription (ex - "nora_tempReadings"), however the string can be anything as long as no other subscription command is the same.
 
 ##Dependencies
-    Sensor classes for the sensors on your device, ex. TMP1x2, LIS3MDL
-    Bullwinkle class (on both the agent and the device)
-    Bullwinkle_Session class (on both the agent and the device)
+*    Sensor Classes (ex. TMP1x2, LIS3MDL)
+*    Bullwinkle Class
+*    Bullwinkle_Session Class
 
-##Agent Side API
+----------------------------------
 
-###List of Public Functions
-    addSensor
-    getSensorInfo
-    setBroadcastCallback
-    updateReportingInterval
-    updateReadingInterval
-    updateEventParams
-    subscribeToStreams
-    subscribeToAStream
-    subscribeToEvent
-    subscribeToAll
-    unsubscribeFromStreams
-    unsubscribeFromAStream
-    unsubscribeFromEvent
-    unsubscribeFromAll
+#Agent Side API
 
-
-###Setup
-
-    Initialize Class
-        parameter 1 - reading interval
-                                This is the time in seconds that you want the imp to wake up and take readings.
-        parameter 2 - reporting interval
-                                This is the time in seconds that you want the imp to connect to the agent and send data.  This should be a multiple of the reading interval, since the reading interval is used to schedule imp wake ups.
-        parameter 3 - instance of bullwinkle class
-                                Bullwinkle is used for agent device communication, and is required for the sensor api to function.
-        Code Example:
-            readingInterval <- 15;
-            reportingInterval <- 60;
-            bullwinkle <- Bullwinkle();
-            api <- AgentSideSensorAPI(readingInterval, reportingInterval, bullwinkle);
-
-    getSensorInfo
-        When called it returns a json string containing the current settings.
-            agentID
-            readingInterval
-            reportingInterval
-            array of sensors  - each sensor is a table
-                    sensorID
-                    sensor type
-                    active - if the sensor is currently subscribed to
-                    an array of the streams (identified by the subscription command) subscribed to
-                        - this is an empty array if no streams are subscribed to
-                    a table of events (identified by the subscription command) subscribed to
-                        - this is an empty table if no events are subscribed to
-                    an array of all streams available to the sensor
-                        - this is an empty array if no streams are available
-                    a table of all events available to the sensor
-                        - this is an empty table if no events are available
-
-        Code Example:
-            { "agentID": "Yke-5UZ58oI1",
-              "readingInterval": 15,
-              "reportingInterval": 60,
-              "sensors": [ { "sensorID": 0,
-                                  "type": "temp",
-                                  "active": true,
-                                  "activeStreams": [ "nora_tempReadings" ],
-                                  "activeEvents": { "nora_tempThermostat": { "high": 30, "low": 29 } },
-                                  "availableStreams": [ "nora_tempReadings" ],
-                                  "availableEvents": { "nora_tempThermostat": { "high": 30, "low": 29 } },
-                                },
-                                { "sensorID": 1,
-                                  "type": "magnitometer",
-                                  "active": false,
-                                  "activeStreams": [ ],
-                                  "activeEvents": { },
-                                  "availableStreams": [ "nora_magReadings" ],
-                                  "availableEvents": { }
-                               } ]
-            }
-
-    addSensor
-        parameter 1 - sensor type
-                                This should be a string.  It is shown to users who request "getSensorInfo".
-        parameter 2 - (optional) an array of sensor streams.
-                                The sensor stream is the subscription command for the stream.  If the sensor only has one stream available, it should be passed in as an array with one element.
-        parameter 3 - (optional) a table of sensor events.
-                                The key is the subscription command for the event.  The value should be a table of parameters you would like to use to configure the event.
-        Code Example:
-            api.addSensor("temp", ["nora_tempReadings"], { "nora_tempThermostat" : {"low": 29, "high": 30} });
-
-    setBroadcastCallback
-        parameter 1 - a function
-                                This is the function that will be run every time the agent receives data from the device.
-        Code Example:
-            function printData(data) { server.log(data) };
-            api.setBroadcastCallback(printData);
+###List of Functions
+*   `#addSensor`
+*   `#getSensorInfo`
+*   `#setBroadcastCallback`
+*   `#updateReportingInterval`
+*   `#updateReadingInterval`
+*   `#updateEventParams`
+*   `#subscribeToStreams`
+*   `#subscribeToAStream`
+*   `#subscribeToEvent`
+*   `#subscribeToAll`
+*   `#unsubscribeFromStreams`
+*   `#unsubscribeFromAStream`
+*   `#unsubscribeFromEvent`
+*   `#unsubscribeFromAll`
 
 
-###Updating
+##Setup
 
-    updateReadingInterval
-        parameter 1 - new reading interval
-                                Changes the reading interval to the new reading interval.  This change will not go into effect until the device connects to the agent.
-        Code Example:
-            api.updateReadingInterval(10);
+####Initialize the Agent API Class
+Parameter| Name             | Description
+:--------|:-----------------|:-----------
+1st      |Reading Interval  |The time in seconds between readings.
+2nd      |Reporting Interval|The time in seconds between internet connection/data sends.
+3rd      |Bullwinkle        |An instance of the Bullwinkle class.
 
-    updateReportingInterval
-        parameter 1 - new reporting interval
-                                Changes the reporting interval to the new reporting interval.  This change will not go into effect until the device connects to the agent.
-        Code Example:
-            api.updateReportingInterval(30);
-
-    updateEventParams
-        parameter 1 - sensor ID
-                                The ID of the sensor.  ID is in the table returned by calling "getSensorInfo".
-        parameter 2 - event
-                                Event is the subscription command for the event.
-        parameter 3 - new event parameters
-                                A table containing the new parameters for the event.
-        Code Example:
-            api.updateEventParams(0, "nora_tempThermostat", {"low": 28})
+######Code Example:
+```
+readingInterval <- 15;
+reportingInterval <- 60;
+bullwinkle <- Bullwinkle();
+api <- AgentSideSensorAPI(readingInterval, reportingInterval, bullwinkle);
+```
 
 
-###Subscription
+#### #getSensorInfo
+`returns` a json string containing the current settings.
 
-    subscribeToStreams
-        parameter 1 - (optional) array of sensor IDs
-                                If given will subscribe to all streams for each sensor given.  If no parameter passed in will subscribe to all stream for all sensors.
-        Code Example:
-            api.subscribeToStreams();
-            api.subscribeToStreams( [0] );
-
-    subscribeToAStream
-        parameter 1 - sensor ID
-                                The ID of the sensor.  ID is in the table returned by calling "getSensorInfo".
-        parameter 2 - stream
-                                Stream is the subscription command for the stream.
-        Code Example:
-            api.subscribeToAStream(0, "nora_tempReadings");
-
-    subscribeToEvent
-        parameter 1 - sensor ID
-                                The ID of the sensor.  ID is in the table returned by calling "getSensorInfo".
-        parameter 2 - event
-                                Event is the subscription command for the event.
-        Code Example:
-            api.subscribeToEvent(0, "nora_tempThermostat");
-
-    subscribeToAll
-        Will subscribe to all events and streams for all sensors.
-        Code Example:
-            api.subscribeToAll();
-
-    unsubscribeFromStreams
-        parameter 1 - (optional) array of sensor IDs
-            If given will unsubscribe from all streams for each sensor given.  If no parameter passed in will unsubscribe from all stream for all sensors.
-        Code Example:
-            api.unsubscribeFromStreams();
-            api.unsubscribeFromStreams( [0] );
-
-    unsubscribeFromAStream
-        parameter 1 - sensor ID
-                                The ID of the sensor.  ID is in the table returned by calling "getSensorInfo".
-        parameter 2 - stream
-                                Stream is the subscription command for the stream.
-        Code Example:
-            api.unsubscribeFromAStream(0, "nora_tempReadings");
-
-    unsubscribeFromEvent
-        parameter 1 - sensor ID
-                                The ID of the sensor.  ID is in the table returned by calling "getSensorInfo".
-        parameter 2 - event
-                                Event is the subscription command for the event.
-        Code Example:
-            api.unsubscribeFromEvent(0, "nora_tempThermostat");
-
-    unsubscribeFromAll
-        Will unsubscribe from all events and streams for all sensors.
-        Code Example:
-            api.unsubscribeFromAll();
+######Code Example:
+```
+api.getSensorInfo();
+```
+######Result
+```
+{ "agentID": "Yke-5UZ58oI1",
+             "readingInterval": 15,
+             "reportingInterval": 60,
+             "sensors": [ { "sensorID": 0,
+                            "type": "temp",
+                            "active": true,
+                            "activeStreams": [ "nora_tempReadings" ],
+                            "activeEvents": { "nora_tempThermostat": { "high": 30, "low": 29 } },
+                            "availableStreams": [ "nora_tempReadings" ],
+                            "availableEvents": { "nora_tempThermostat": { "high": 30, "low": 29 } },
+                          },
+                          { "sensorID": 1,
+                            "type": "magnitometer",
+                            "active": false,
+                            "activeStreams": [ ],
+                            "activeEvents": { },
+                            "availableStreams": [ "nora_magReadings" ],
+                            "availableEvents": { }
+                          } ]
+}
+```
 
 
-##Device Side API
+#### #addSensor
+Parameter     | Name       | Description
+:-------------|:-----------|:-----------
+1st           | Sensor Type|A string that is shown to users who request `#getSensorInfo`
+2nd (optional)| Streams    |An array of all available data streams' subscription commands for the sensor.
+3rd (optional)| Events     |A table of all available events for the sensor. Keys are the subscription command.  Values are a table of parameters used to configure the event.
 
-###Setup
-
-    Setup will vary based on the sensors used.  I'm going to include code examples for the setup of the temperature sensor on the nora.
-
-    Basic configuration for Nora Sensor:
-        Code Example:
-            const TMP1x2_ADDR = 0x92;
-            hardware.pinA.configure(DIGITAL_IN);
-            hardware.pinB.configure(DIGITAL_IN);
-            hardware.pinC.configure(DIGITAL_IN);
-            hardware.pinD.configure(DIGITAL_IN);
-            hardware.pinE.configure(DIGITAL_IN);
-            hardware.pin1.configure(DIGITAL_IN_WAKEUP);
-            i2c         <- hardware.i2c89;
-            i2c.configure(CLOCK_SPEED_400_KHZ);
-
-    Setup the variables to store initialized sensors, since we only want to initialize the sensors we are acutally subscribed to.  Note - on nora we needed to initialize the magnitometer for interupts to work.
-        Code Example:
-            noraTemp <- null;
-            mag <- LIS3MDL(i2c);
-
-    Custom functions for sensors:
-        I've written some functions so the sensors are initialized when I want and have the parameters the agent has programmed.  Any behavior you want to define that is not in the class can customized in this step.
-        Code Example:
-            //initialize nora temp sensor
-            function initializeTemp() {
-                if (!noraTemp) { noraTemp <- TMP1x2(i2c, TMP1x2_ADDR, hardware.pinE); }
-            }
-            //set event parameters
-            function setUpTempThermostat(params) {
-                initializeTemp();
-                if("low" in params) {noraTemp.setLowThreshold(params.low)};
-                if("high" in params) {noraTemp.setHighThreshold(params.high)};
-            }
-            //turn off event.  currently this is not working, ideally the code here would stop event from firing.
-            function resetEvents() {
-                if(noraTemp) { noraTemp.reset(); }
-            }
-
-        Agent/Device Communication table:
-            keys are the subscription command
-            values are the function to be run when we subscribe to stream/event. For streams this function should return a reading.  For event this function should set the parameters for the event.
-                Code Example:
-                    sensorSubscriptionFunctionsByCommand <- {
-                            "nora_tempReadings" : function() { initializeTemp(); return noraTemp.readTempC(); },
-                            "nora_tempThermostat" : function(params) { setUpTempThermostat(params); },
-                    }
-
-        Initialize Device API class
-            parameter 1 - name
-                                    Used to namespace nv table.
-            parameter 2 - Agent/Device Communication table
-                                    The table of command named and functions to be run when we subscribe to a stream or event.
-            parameter 3 - instance of bullwinkle class
-                                    Bullwinkle is used for agent device communication, and is required for the sensor api to function.
-            parameter 4 - (optional) function to turn off events
-            Code Example:
-                bullwinkle <- Bullwinkle();
-                api <- deviceSideSensorAPI("nora", sensorSubscriptionFunctionsByCommand, bullwinkle, resetEvents);
+######Code Example:
+```
+api.addSensor("temp", ["nora_tempReadings"], { "nora_tempThermostat" : {"low": 29, "high": 30} });
+```
 
 
-        Set up event handling
-            For each event we need some additional set up.  "setUpEvent"  takes in the additional info for each event.
-            parameter 1 - event
-                                    Subscription command.
-            parameter 2 - pin
-                                    the interrupt pin for the event
-            parameter 3 - polarity
-                                    polarity of the pin when the event is triggered
-            parameter 4 - function
-                                    the function that will run when the event is triggered.  should return data or message for end user
-            Code Example:
-                api.setUpEvent("nora_tempThermostat", "pinE", 0, function(){ initializeTemp(); return noraTemp.readTempC(); });
+#### #setBroadcastCallback
+Parameter     | Name        | Description
+:-------------|:------------|:-----------
+1st           | callback    |A function that will run everytime the agent receives data from the device.
+
+######Code Example:
+```
+function printData(data) { server.log(data) };
+api.setBroadcastCallback(printData);
+```
+
+
+##Updating
+
+#### #updateReadingInterval
+
+NOTE: This change will not go into effect until the device connects to the agent.
+
+Parameter     | Name                | Description
+:-------------|:--------------------|:-----------
+1st           |New Reading Interval |The time in seconds between readings.
+
+
+######Code Example:
+```
+api.updateReadingInterval(10);
+```
+
+#### #updateReportingInterval
+
+NOTE: This change will not go into effect until the device connects to the agent.
+
+Parameter     | Name                  | Description
+:-------------|:----------------------|:-----------
+1st           |New Reporting Interval |The time in seconds between internet connection/data sends.
+
+######Code Example:
+```
+api.updateReportingInterval(30);
+```
+
+#### #updateEventParams
+Parameter     | Name           | Description
+:-------------|:---------------|:-----------
+1st           |Sensor ID       |The ID of the sensor. The ID is in the table returned by calling `#getSensorInfo`.
+2nd           |Event           |The subscription command for the event.
+3rd           |New Event Params|A table containing the new parameters for the event.
+
+######Code Example:
+```
+api.updateEventParams(0, "nora_tempThermostat", {"low": 28})
+```
+
+
+##Subscription
+
+#### #subscribeToStreams
+Parameter     | Name           | Description
+:-------------|:---------------|:-----------
+1st (optional)|Sensor IDs      |An Array of sensor IDs. Will subscribe to all streams for each sensor in the array.  If no parameter is passed in will subscribe to all streams for all sensors.
+
+######Code Example:
+```
+api.subscribeToStreams();
+api.subscribeToStreams([0]);
+```
+
+#### #subscribeToAStream
+Parameter     | Name           | Description
+:-------------|:---------------|:-----------
+1st           |Sensor ID       |The ID of the sensor. The ID is in the table returned by calling `#getSensorInfo`.
+2nd           |Stream          |The subscription command for the stream.
+
+######Code Example:
+```
+api.subscribeToAStream(0, "nora_tempReadings");
+```
+
+#### #subscribeToEvent
+Parameter     | Name           | Description
+:-------------|:---------------|:-----------
+1st           |Sensor ID       |The ID of the sensor. The ID is in the table returned by calling `#getSensorInfo`.
+2nd           |Event           |The subscription command for the event.
+
+######Code Example:
+```
+api.subscribeToEvent(0, "nora_tempThermostat");
+```
+
+#### #subscribeToAll
+
+Will subscribe to all events and streams for all sensors.
+
+######Code Example:
+```
+api.subscribeToAll();
+```
+
+#### #unsubscribeFromStreams
+Parameter     | Name           | Description
+:-------------|:---------------|:-----------
+1st (optional)|Sensor IDs      |An Array of sensor IDs. Will unsubscribe from all streams for each sensor in the array.  If no parameter is passed in will unsubscribe from all streams for all sensors.
+
+######Code Example:
+```
+api.unsubscribeFromStreams();
+api.unsubscribeFromStreams([0]);
+```
+
+#### #unsubscribeFromAStream
+Parameter     | Name           | Description
+:-------------|:---------------|:-----------
+1st           |Sensor ID       |The ID of the sensor. The ID is in the table returned by calling `#getSensorInfo`.
+2nd           |Stream           |The subscription command for the stream.
+
+######Code Example:
+```
+api.unsubscribeFromAStream(0, "nora_tempReadings");
+```
+#### #unsubscribeFromEvent
+Parameter     | Name           | Description
+:-------------|:---------------|:-----------
+1st           |Sensor ID       |The ID of the sensor. The ID is in the table returned by calling `#getSensorInfo`.
+2nd           |Event           |The subscription command for the event.
+
+######Code Example:
+```
+api.unsubscribeFromEvent(0, "nora_tempThermostat");
+```
+#### #unsubscribeFromAll
+
+Will unsubscribe from all events and streams for all sensors.
+
+######Code Example:
+```
+api.unsubscribeFromAll();
+```
+
+------------------------------------------
+#Device Side API
+
+##Setup
+
+Setup will vary based on the sensors used.  I'm going to include code examples for the setup of the temperature sensor on the nora.
+
+###Basic configuration for Nora Sensor:
+
+####Configure pins and i2c
+
+######Code Example:
+```
+const TMP1x2_ADDR = 0x92;
+hardware.pinA.configure(DIGITAL_IN);
+hardware.pinB.configure(DIGITAL_IN);
+hardware.pinC.configure(DIGITAL_IN);
+hardware.pinD.configure(DIGITAL_IN);
+hardware.pinE.configure(DIGITAL_IN);
+hardware.pin1.configure(DIGITAL_IN_WAKEUP);
+i2c         <- hardware.i2c89;
+i2c.configure(CLOCK_SPEED_400_KHZ);
+```
+
+####Setup Sensor Variables
+We only want to initialize the sensors we are acutally subscribed to.  Note - on nora we needed to initialize the magnitometer for interupts to work.
+
+######Code Example:
+```
+noraTemp <- null;
+mag <- LIS3MDL(i2c);
+```
+####Custom functions for sensors
+I've written some functions so the sensors are initialized when I want and have the parameters the agent has programmed.  Any behavior you want to define that is not in the class can customized in this step.
+
+######Code Example:
+```
+//initialize nora temp sensor
+function initializeTemp() {
+    if (!noraTemp) { noraTemp <- TMP1x2(i2c, TMP1x2_ADDR, hardware.pinE); }
+}
+//set event parameters
+function setUpTempThermostat(params) {
+    initializeTemp();
+    if("low" in params) {noraTemp.setLowThreshold(params.low)};
+    if("high" in params) {noraTemp.setHighThreshold(params.high)};
+}
+//turn off event.  currently this is not working, ideally the code here would stop event from firing.
+function resetEvents() {
+    if(noraTemp) { noraTemp.reset(); }
+}
+```
+
+###Agent/Device Communication table
+Keys are the subscription command.
+Values are the function to be run when we subscribe to stream/event. For streams this function should return the data you would like to stream.  For an event this function should set the parameters for the event.
+
+######Code Example:
+```
+sensorSubscriptionFunctionsByCommand <- {
+    "nora_tempReadings" : function() { initializeTemp(); return noraTemp.readTempC(); },
+    "nora_tempThermostat" : function(params) { setUpTempThermostat(params); },
+}
+```
+
+###Initialize Device API class
+
+Parameter     | Name                           | Description
+:-------------|:-------------------------------|:-----------
+1st           |Name                            |Used to namespace NV table.
+2nd           |Agent/Device Communication table|The table of subscription command keys and subscription function values.
+3rd           |Bullwinkle                      |An instance of the Bullwinkle class.
+4th (optional)|Event Off function              |A function that turns off all events.
+
+######Code Example:
+```
+bullwinkle <- Bullwinkle();
+api <- deviceSideSensorAPI("nora", sensorSubscriptionFunctionsByCommand, bullwinkle, resetEvents);
+```
+
+#### #setUpEvent
+For each event we need some additional set up.  `#setUpEvent`  takes in the additional info for each event.
+Parameter     | Name                    | Description
+:-------------|:------------------------|:-----------
+1st           |Event                    |Subscription command for the event.
+2nd           |Pin                      |The interrupt pin for the event.
+3rd           |Polarity                 |Polarity of the interrupt pin when event is triggered.
+4th (optional)|Event Triggered function |A function that runs when event is triggered. Function should `return` data or message for the end user.
+
+######Code Example:
+```
+api.setUpEvent("nora_tempThermostat", "pinE", 0, function(){ initializeTemp(); return noraTemp.readTempC(); });
+```

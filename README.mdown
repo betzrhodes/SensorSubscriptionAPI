@@ -3,13 +3,13 @@
 Used to create a pub/sub stream of sensor data between your device and agent.  The api supports subscriptions to streams and events.  Communication is based on subscription commands. These are unique strings used to identify each subscription.   In the example code I have used the name of the sensor instance underscore description of the subscription (ex - "nora_tempReadings"), however the string can be anything as long as no other subscription command is the same.
 
 ##Dependencies
-    sensor classes for the sensors on your device
-    bullwinkle class
-
+    Sensor classes for the sensors on your device, ex. TMP1x2, LIS3MDL
+    Bullwinkle class (on both the agent and the device)
+    Bullwinkle_Session class (on both the agent and the device)
 
 ##Agent Side API
 
-###List of functions
+###List of Public Functions
     addSensor
     getSensorInfo
     setBroadcastCallback
@@ -184,3 +184,63 @@ Used to create a pub/sub stream of sensor data between your device and agent.  T
 
 
 ##Device Side API
+
+###Setup
+
+    Setup will vary based on the sensors used.  I'm going to include the setup for the temperature sensor on the nora.
+
+    Basic Code for Nora Sensor Setup:
+        const TMP1x2_ADDR = 0x92;
+        hardware.pinA.configure(DIGITAL_IN);
+        hardware.pinB.configure(DIGITAL_IN);
+        hardware.pinC.configure(DIGITAL_IN);
+        hardware.pinD.configure(DIGITAL_IN);
+        hardware.pinE.configure(DIGITAL_IN);
+        hardware.pin1.configure(DIGITAL_IN_WAKEUP);
+        i2c         <- hardware.i2c89;
+        i2c.configure(CLOCK_SPEED_400_KHZ);
+
+    Setup the variables to store initialized sensors, since we only want to initialize the sensors we are acutally subscribed to.  For some reason we needed to initialize the magnitometer for interupts to work.
+    Code Example:
+        noraTemp <- null;
+        mag <- LIS3MDL(i2c);
+
+    Custom functions for sensors:
+        Initialize Code:
+            function initializeTemp() {
+                if (!noraTemp) { noraTemp <- TMP1x2(i2c, TMP1x2_ADDR, hardware.pinE); }
+            }
+        Event Set Parameters Code:
+            function setUpTempThermostat(params) {
+                initializeTemp();
+                if("low" in params) {noraTemp.setLowThreshold(params.low)};
+                if("high" in params) {noraTemp.setHighThreshold(params.high)};
+            }
+        Turn off event Code:
+            function resetEvents() {
+                if(noraTemp) { noraTemp.reset(); }  - this is not working, ideally the code here would stop event from firing. - may need to just turn off digital wakeup pin and turn on when we subscribe to event??
+            }
+
+        Agent/Device Communication table:
+            keys are the subscription command
+            values are the function to be run when we subscribe to stream/event
+                Code Example:
+                    sensorSubscriptionFunctionsByCommand <- { "nora_tempReadings" : function() {
+                                                                                                initializeTemp();
+                                                                                                return noraTemp.readTempC() },
+                                                                                            "nora_tempThermostat" : function(params) {
+                                                                                                setUpTempThermostat(params); },
+                                                                                         }
+
+        Initialize Device API class
+            parameter 1 - name
+                                    Used to namespace nv table.
+            parameter 2 - Agent/Device Communication table
+                                    The table of command named and functions to be run when we subscribe to a stream or event.
+            parameter 3 - instance of bullwinkle class
+                                Bullwinkle is used for agent device communication, and is required for the sensor api to function.
+            parameter 4 - (optional) function to turn off events
+            Code Example:
+                bullwinkle <- Bullwinkle();
+                api <- deviceSideSensorAPI("nora", sensorSubscriptionFunctionsByCommand, bullwinkle, resetEvents);
+

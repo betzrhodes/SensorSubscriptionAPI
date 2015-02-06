@@ -1,5 +1,5 @@
 #Sensor API Classes
-Used to create a pub/sub stream of sensor data between your device and agent.  The api supports subscriptions to streams and events.  Communication is based on subscription commands. These are unique strings used to identify each subscription.   In the example code I have used the name of the sensor instance underscore description of the subscription (ex - "nora_tempReadings"), however the string can be anything as long as no other subscription command is the same.
+Used to create a pub/sub stream of sensor data between device and agent.  The api supports subscriptions to data streams and events.  Communication is based on subscription commands. These are unique strings used to identify each subscription.   In the example code I have used the name of the sensor instance underscore description of the subscription (ex - "nora_tempReadings"), however the string can be anything as long as no other subscription command is the same.
 
 ##Dependencies
 *    Sensor Classes (ex. TMP1x2, LIS3MDL)
@@ -12,8 +12,8 @@ Used to create a pub/sub stream of sensor data between your device and agent.  T
 
 ###List of Functions
 *   `#addSensor`
-*   `#getSensorInfo`
 *   `#setBroadcastCallback`
+*   `#getSensorInfo`
 *   `#updateReportingInterval`
 *   `#updateReadingInterval`
 *   `#updateEventParams`
@@ -42,6 +42,31 @@ readingInterval <- 15;
 reportingInterval <- 60;
 bullwinkle <- Bullwinkle();
 api <- AgentSideSensorAPI(readingInterval, reportingInterval, bullwinkle);
+```
+
+
+#### #addSensor
+Parameter     | Name       | Description
+:-------------|:-----------|:-----------
+1st           | Sensor Type|A string that is shown to users who request `#getSensorInfo`
+2nd (optional)| Streams    |An array of all available data streams' subscription commands for the sensor.
+3rd (optional)| Events     |A table of all available events for the sensor. Keys are the subscription command.  Values are a table of parameters used to configure the event.
+
+######Code Example:
+```
+api.addSensor("temp", ["nora_tempReadings"], { "nora_tempThermostat" : {"low": 29, "high": 30} });
+```
+
+
+#### #setBroadcastCallback
+Parameter     | Name        | Description
+:-------------|:------------|:-----------
+1st           | callback    |A function that will run everytime the agent receives data from the device.
+
+######Code Example:
+```
+function printData(data) { server.log(data) };
+api.setBroadcastCallback(printData);
 ```
 
 
@@ -74,31 +99,6 @@ api.getSensorInfo();
                             "availableEvents": { }
                           } ]
 }
-```
-
-
-#### #addSensor
-Parameter     | Name       | Description
-:-------------|:-----------|:-----------
-1st           | Sensor Type|A string that is shown to users who request `#getSensorInfo`
-2nd (optional)| Streams    |An array of all available data streams' subscription commands for the sensor.
-3rd (optional)| Events     |A table of all available events for the sensor. Keys are the subscription command.  Values are a table of parameters used to configure the event.
-
-######Code Example:
-```
-api.addSensor("temp", ["nora_tempReadings"], { "nora_tempThermostat" : {"low": 29, "high": 30} });
-```
-
-
-#### #setBroadcastCallback
-Parameter     | Name        | Description
-:-------------|:------------|:-----------
-1st           | callback    |A function that will run everytime the agent receives data from the device.
-
-######Code Example:
-```
-function printData(data) { server.log(data) };
-api.setBroadcastCallback(printData);
 ```
 
 
@@ -296,10 +296,10 @@ sensorSubscriptionFunctionsByCommand <- {
 ###Initialize Device API class
 
 Parameter     | Name                           | Description
-:-------------|:-------------------------------|:-----------
-1st           |Name                            |Used to namespace NV table.
-2nd           |Agent/Device Communication table|The table of subscription command keys and subscription function values.
-3rd           |Bullwinkle                      |An instance of the Bullwinkle class.
+:-----------|:-------------------------------|:-----------
+1st                |Name                            |Used to namespace NV table.
+2nd               |Agent/Device Communication table|The table of subscription command keys and subscription function values.
+3rd               |Bullwinkle                      |An instance of the Bullwinkle class.
 4th (optional)|Event Off function              |A function that turns off all events.
 
 ######Code Example:
@@ -311,12 +311,12 @@ api <- deviceSideSensorAPI("nora", sensorSubscriptionFunctionsByCommand, bullwin
 #### #setUpEvent
 For each event we need some additional set up.  `#setUpEvent`  takes in the additional info for each event.
 
-Parameter     | Name                    | Description
-:-------------|:------------------------|:-----------
-1st           |Event                    |Subscription command for the event.
+Parameter  | Name                    | Description
+:-------- |:------------------------|:-----------
+1st            |Event                    |Subscription command for the event.
 2nd           |Pin                      |The interrupt pin for the event.
 3rd           |Polarity                 |Polarity of the interrupt pin when event is triggered.
-4th (optional)|Event Triggered function |A function that runs when event is triggered. Function should `return` data or message for the end user.
+4th           |Event Triggered function |A function that runs when event is triggered. Function should `return` data or message for the end user.
 
 ######Code Example:
 ```

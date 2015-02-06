@@ -310,6 +310,7 @@ api <- deviceSideSensorAPI("nora", sensorSubscriptionFunctionsByCommand, bullwin
 
 #### #setUpEvent
 For each event we need some additional set up.  `#setUpEvent`  takes in the additional info for each event.
+
 Parameter     | Name                    | Description
 :-------------|:------------------------|:-----------
 1st           |Event                    |Subscription command for the event.

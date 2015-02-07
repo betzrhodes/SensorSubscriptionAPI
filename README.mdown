@@ -83,21 +83,21 @@ api.getSensors();
   "readingInterval": 15,
   "reportingInterval": 60,
   "sensors": [ { "sensorID": 0,
-                      "type": "temp",
-                      "active": true,
-                      "activeStreams": [ "nora_tempReadings" ],
-                      "activeEvents": { "nora_tempThermostat": { "high": 30, "low": 29 } },
-                      "availableStreams": [ "nora_tempReadings" ],
-                      "availableEvents": { "nora_tempThermostat": { "high": 30, "low": 29 } },
-                    },
-                    { "sensorID": 1,
-                      "type": "magnitometer",
-                      "active": false,
-                      "activeStreams": [ ],
-                      "activeEvents": { },
-                      "availableStreams": [ "nora_magReadings" ],
-                      "availableEvents": { }
-                    } ]
+                 "type": "temp",
+                 "active": true,
+                 "activeStreams": [ "nora_tempReadings" ],
+                 "activeEvents": { "nora_tempThermostat": { "high": 30, "low": 29 } },
+                 "availableStreams": [ "nora_tempReadings" ],
+                 "availableEvents": { "nora_tempThermostat": { "high": 30, "low": 29 } },
+               },
+               { "sensorID": 1,
+                 "type": "magnitometer",
+                 "active": false,
+                 "activeStreams": [ ],
+                 "activeEvents": { },
+                 "availableStreams": [ "nora_magReadings" ],
+                 "availableEvents": { }
+               } ]
 }
 ```
 

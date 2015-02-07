@@ -13,18 +13,18 @@ Used to create a pub/sub stream of sensor data between device and agent.  The ap
 ###List of Functions
 *   `#addSensor`
 *   `#setBroadcastCallback`
-*   `#getSensorInfo`
+*   `#getSensors`
 *   `#updateReportingInterval`
 *   `#updateReadingInterval`
 *   `#updateEventParams`
-*   `#subscribeToStreams`
-*   `#subscribeToAStream`
-*   `#subscribeToEvent`
-*   `#subscribeToAll`
-*   `#unsubscribeFromStreams`
-*   `#unsubscribeFromAStream`
-*   `#unsubscribeFromEvent`
-*   `#unsubscribeFromAll`
+*   `#activateStreams`
+*   `#activateAStream`
+*   `#activateEvent`
+*   `#activateAll`
+*   `#deactivateStreams`
+*   `#deactivateAStream`
+*   `#deactivateEvent`
+*   `#deactivateAll`
 
 
 ##Setup
@@ -48,7 +48,7 @@ api <- AgentSideSensorAPI(readingInterval, reportingInterval, bullwinkle);
 #### #addSensor
 Parameter     | Name       | Description
 :-------------|:-----------|:-----------
-1st           | Sensor Type|A string that is shown to users who request `#getSensorInfo`
+1st           | Sensor Type|A string that is shown to users who request `#getSensors`
 2nd (optional)| Streams    |An array of all available data streams' subscription commands for the sensor.
 3rd (optional)| Events     |A table of all available events for the sensor. Keys are the subscription command.  Values are a table of parameters used to configure the event.
 
@@ -70,34 +70,34 @@ api.setBroadcastCallback(printData);
 ```
 
 
-#### #getSensorInfo
+#### #getSensors
 `returns` a json string containing the current settings.
 
 ######Code Example:
 ```
-api.getSensorInfo();
+api.getSensors();
 ```
 ######Result
 ```
 { "agentID": "Yke-5UZ58oI1",
-             "readingInterval": 15,
-             "reportingInterval": 60,
-             "sensors": [ { "sensorID": 0,
-                            "type": "temp",
-                            "active": true,
-                            "activeStreams": [ "nora_tempReadings" ],
-                            "activeEvents": { "nora_tempThermostat": { "high": 30, "low": 29 } },
-                            "availableStreams": [ "nora_tempReadings" ],
-                            "availableEvents": { "nora_tempThermostat": { "high": 30, "low": 29 } },
-                          },
-                          { "sensorID": 1,
-                            "type": "magnitometer",
-                            "active": false,
-                            "activeStreams": [ ],
-                            "activeEvents": { },
-                            "availableStreams": [ "nora_magReadings" ],
-                            "availableEvents": { }
-                          } ]
+  "readingInterval": 15,
+  "reportingInterval": 60,
+  "sensors": [ { "sensorID": 0,
+                      "type": "temp",
+                      "active": true,
+                      "activeStreams": [ "nora_tempReadings" ],
+                      "activeEvents": { "nora_tempThermostat": { "high": 30, "low": 29 } },
+                      "availableStreams": [ "nora_tempReadings" ],
+                      "availableEvents": { "nora_tempThermostat": { "high": 30, "low": 29 } },
+                    },
+                    { "sensorID": 1,
+                      "type": "magnitometer",
+                      "active": false,
+                      "activeStreams": [ ],
+                      "activeEvents": { },
+                      "availableStreams": [ "nora_magReadings" ],
+                      "availableEvents": { }
+                    } ]
 }
 ```
 
@@ -134,7 +134,7 @@ api.updateReportingInterval(30);
 #### #updateEventParams
 Parameter     | Name           | Description
 :-------------|:---------------|:-----------
-1st           |Sensor ID       |The ID of the sensor. The ID is in the table returned by calling `#getSensorInfo`.
+1st           |Sensor ID       |The ID of the sensor. The ID is in the table returned by calling `#getSensors`.
 2nd           |Event           |The subscription command for the event.
 3rd           |New Event Params|A table containing the new parameters for the event.
 
@@ -144,88 +144,88 @@ api.updateEventParams(0, "nora_tempThermostat", {"low": 28})
 ```
 
 
-##Subscription
+##Activation
 
-#### #subscribeToStreams
+#### #activateStreams
 Parameter     | Name           | Description
 :-------------|:---------------|:-----------
 1st (optional)|Sensor IDs      |An Array of sensor IDs. Will subscribe to all streams for each sensor in the array.  If no parameter is passed in will subscribe to all streams for all sensors.
 
 ######Code Example:
 ```
-api.subscribeToStreams();
-api.subscribeToStreams([0]);
+api.activateStreams();
+api.activateStreams([0]);
 ```
 
-#### #subscribeToAStream
+#### #activateAStream
 Parameter     | Name           | Description
 :-------------|:---------------|:-----------
-1st           |Sensor ID       |The ID of the sensor. The ID is in the table returned by calling `#getSensorInfo`.
+1st           |Sensor ID       |The ID of the sensor. The ID is in the table returned by calling `#getSensors`.
 2nd           |Stream          |The subscription command for the stream.
 
 ######Code Example:
 ```
-api.subscribeToAStream(0, "nora_tempReadings");
+api.activateAStream(0, "nora_tempReadings");
 ```
 
-#### #subscribeToEvent
+#### #activateEvent
 Parameter     | Name           | Description
 :-------------|:---------------|:-----------
-1st           |Sensor ID       |The ID of the sensor. The ID is in the table returned by calling `#getSensorInfo`.
+1st           |Sensor ID       |The ID of the sensor. The ID is in the table returned by calling `#getSensors`.
 2nd           |Event           |The subscription command for the event.
 
 ######Code Example:
 ```
-api.subscribeToEvent(0, "nora_tempThermostat");
+api.activateEvent(0, "nora_tempThermostat");
 ```
 
-#### #subscribeToAll
+#### #activateAll
 
-Will subscribe to all events and streams for all sensors.
+Will activate all events and streams for all sensors.
 
 ######Code Example:
 ```
-api.subscribeToAll();
+api.activateAll();
 ```
 
-#### #unsubscribeFromStreams
+#### #deactivateStreams
 Parameter     | Name           | Description
 :-------------|:---------------|:-----------
 1st (optional)|Sensor IDs      |An Array of sensor IDs. Will unsubscribe from all streams for each sensor in the array.  If no parameter is passed in will unsubscribe from all streams for all sensors.
 
 ######Code Example:
 ```
-api.unsubscribeFromStreams();
-api.unsubscribeFromStreams([0]);
+api.deactivateStreams();
+api.deactivateStreams([0]);
 ```
 
-#### #unsubscribeFromAStream
+#### #deactivateAStream
 Parameter     | Name           | Description
 :-------------|:---------------|:-----------
-1st           |Sensor ID       |The ID of the sensor. The ID is in the table returned by calling `#getSensorInfo`.
+1st           |Sensor ID       |The ID of the sensor. The ID is in the table returned by calling `#getSensors`.
 2nd           |Stream           |The subscription command for the stream.
 
 ######Code Example:
 ```
-api.unsubscribeFromAStream(0, "nora_tempReadings");
+api.deactivateAStream(0, "nora_tempReadings");
 ```
-#### #unsubscribeFromEvent
+#### #deactivateEvent
 Parameter     | Name           | Description
 :-------------|:---------------|:-----------
-1st           |Sensor ID       |The ID of the sensor. The ID is in the table returned by calling `#getSensorInfo`.
+1st           |Sensor ID       |The ID of the sensor. The ID is in the table returned by calling `#getSensors`.
 2nd           |Event           |The subscription command for the event.
 
 ######Code Example:
 ```
-api.unsubscribeFromEvent(0, "nora_tempThermostat");
+api.deactivateEvent(0, "nora_tempThermostat");
 ```
-#### #unsubscribeFromAll
+#### #deactivateAll
 
-Will unsubscribe from all events and streams for all sensors.
+Will deactivate all events and streams for all sensors.
 
 ######Code Example:
 ```
-api.unsubscribeFromAll();
+api.deactivateAll();
 ```
 
 ------------------------------------------

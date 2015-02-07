@@ -443,8 +443,8 @@ class TMP1x2 {
     _conf   = null;
 
     // Default temp thresholds
-    _lowThreshold   = 20; // Celsius
-    _highThreshold  = 25;
+    _lowThreshold   = 75; // Celsius
+    _highThreshold  = 80;
 
     // Default mode
     _extendedMode   = false;
@@ -972,7 +972,6 @@ hardware.pin1.configure(DIGITAL_IN_WAKEUP);
 //i2c setup
 i2c         <- hardware.i2c89;
 i2c.configure(CLOCK_SPEED_400_KHZ);
-
 
 mag <- LIS3MDL(i2c); //needs to be initialized for event wakeup to function on nora??
 

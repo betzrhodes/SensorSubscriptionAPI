@@ -901,13 +901,13 @@ class AgentSideSensorAPI {
         _broadcastCallback = callback;
     }
 
-    function getSensorInfo() {
+    function getSensors() {
         return http.jsonencode(_sensorSettings);
     }
 
     // subscribe to 1, some, all sensors (this will turn on all streams for a given sensor)
     // takes an array of sensorIDs as a parameter (if no parameter then will subscribe to all sensors)
-    function subscribeToStreams(sensorIDs=null) {
+    function activateStreams(sensorIDs=null) {
         //if no sensorId given create an array of all sensorIDs
         if(!sensorIDs) { sensorIDs = _createSensorIDArray(); }
         foreach(sID in sensorIDs) {
@@ -920,7 +920,7 @@ class AgentSideSensorAPI {
         }
     }
 
-    function subscribeToAStream(sensorID, stream) {
+    function activateAStream(sensorID, stream) {
         if(stream in _sensorSettings.sensors[sensorID].availableStreams) {
             _sensorSettings.sensors[sensorID].activeStreams.push(stream);
             _sensorSettings.sensors[sID].active = true;
@@ -931,7 +931,7 @@ class AgentSideSensorAPI {
     // subscribe to specific event
     // example parameters - (1, "sensorTail_themostat", [20, 30])
     // if no eventParams are passed in then default params for event will be used
-    function subscribeToEvent(sensorID, event, eventParams=null) {
+    function activateEvent(sensorID, event, eventParams=null) {
         if(event in _sensorSettings.sensors[sensorID].availableEvents) {
             if(eventParams == null) { eventParams = _sensorSettings.sensors[sensorID].availableEvents[event] };
             _sensorSettings.sensors[sensorID].activeEvents[event] <- eventParams;
@@ -941,7 +941,7 @@ class AgentSideSensorAPI {
     }
 
     //subscribes to all streams & events with default settings
-    function subscribeToAll() {
+    function activateAll() {
         local sensorIDs = _createSensorIDArray();
         foreach(sID in sensorIDs) {
             _sensorSettings.sensors[sID].activeStreams = _sensorSettings.sensors[sID].availableStreams;
@@ -955,7 +955,7 @@ class AgentSideSensorAPI {
     }
 
     //unsubscribes form all streams & events
-    function unsubscribeFromAll() {
+    function deactivateAll() {
         local sensorIDs = _createSensorIDArray();
         foreach(sID in sensorIDs) {
             _sensorSettings.sensors[sID].activeStreams = {};
@@ -967,7 +967,7 @@ class AgentSideSensorAPI {
 
     // unsubscribe to 1, some, all sensors (this will turn off all streams & events for the given sensors)
     // takes an array of sensorIDs as a parameter (if no parameter then will subscribe to all)
-    function unsubscribeFromStreams(sensorIDs=null) {
+    function deactivateStreams(sensorIDs=null) {
         if(!sensorIDs) { sensorIDs = _createSensorIDArray() };
         foreach(sID in sensorIDs) {
             _sensorSettings.sensors[sID].activeStreams = {};
@@ -978,7 +978,7 @@ class AgentSideSensorAPI {
         }
     }
 
-    function unsubscribeFromAStream(sensorID, stream) {
+    function deactivateAStream(sensorID, stream) {
         if(stream in _sensorSettings.sensors[sensorID].activeStreams) {
             _sensorSettings.sensors[sensorID].activeStreams.remove( _sensorSettings.sensors[sensorID].activeStreams.find(stream) );
             if(_sensorSettings.sensors[sID].active && _sensorSettings.sensors[sID].activeStreams.len() == 0 && _sensorSettings.sensors[sID].activeEvents.len() == 0) {
@@ -988,7 +988,7 @@ class AgentSideSensorAPI {
         }
     }
 
-    function unsubscribeFromEvent(sensorID, event) {
+    function deactivateEvent(sensorID, event) {
         if(event in _sensorSettings.sensors[sensorID].activeEvents) {
             _sensorSettings.sensors[sensorID].activeEvents.rawdelete(event);
             if(_sensorSettings.sensors[sID].active && _sensorSettings.sensors[sID].activeStreams.len() == 0 && _sensorSettings.sensors[sID].activeEvents.len() == 0) {
@@ -1103,23 +1103,23 @@ api.addSensor("temp", ["nora_tempReadings"], {"nora_tempThermostat" : {"low": 29
 
 
 //run time tests
-server.log(api.getSensorInfo());
-api.subscribeToAll();
-server.log(api.getSensorInfo());
+server.log(api.getSensors());
+// api.activateAll();
+// server.log(api.getSensors());
 // imp.wakeup(130, function() {
-//     api.unsubscribeFromAll();
-//     server.log(api.getSensorInfo());
+//     api.deactivateAll();
+//     server.log(api.getSensors());
 // }.bindenv(api));
 
-// api.subscribeToStreams();
-// imp.wakeup(110, api.unsubscribeFromStreams.bindenv(api));
+// imp.wakeup(190, api.activateStreams.bindenv(api));
+// imp.wakeup(245, api.deactivateStreams.bindenv(api));
 
-// api.subscribeToStreams([0])
-// imp.wakeup(50, function() { api.updateReadingInterval(10); }.bindenv(api))
-// imp.wakeup(50, function() { api.updateReportingInterval(30); }.bindenv(api))
+api.activateStreams([0])
+imp.wakeup(50, function() { api.updateReadingInterval(10); }.bindenv(api))
+imp.wakeup(50, function() { api.updateReportingInterval(30); }.bindenv(api))
 
-// api.subscribeToEvent(0, "noraTemp_thermostat");
-// imp.wakeup(110, function() { api.unsubscribeFromEvent(0, "noraTemp_thermostat")}.bindenv(api));
+api.activateEvent(0, "nora_tempThermostat");
+// imp.wakeup(110, function() { api.deactivateEvent(0, "nora_tempThermostat")}.bindenv(api));
 
 
 //data structure examples

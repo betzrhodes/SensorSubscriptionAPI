@@ -1100,7 +1100,8 @@ api.setBroadcastCallback(printData);
 //table with key of events/commands - this needs to be the same as the name/command in sensorSubscriptionFunctionsByCommand on the divice
 //and value a table of params - the key is the identifier to make parameters searchable on the divice side
 api.addSensor("temp", ["nora_tempReadings"], {"nora_tempThermostat" : {"low": 29, "high": 30}});
-
+//do this on the device side? and import settings?? - not a great idea
+//rename - this assigns channels to sensors, and sets default params, and sets a sensor type
 
 //run time tests
 server.log(api.getSensors());

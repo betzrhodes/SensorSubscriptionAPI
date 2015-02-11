@@ -1,5 +1,5 @@
 #Sensor API Classes
-Used to create a pub/sub stream of sensor data between device and agent.  The api supports subscriptions to data streams and events.  Communication is based on subscription commands. These are unique strings used to identify each subscription.   In the example code I have used the name of the sensor instance underscore description of the subscription (ex - "nora_tempReadings"), however the string can be anything as long as no other subscription command is the same.
+Used to create a pub/sub stream of sensor data between device and agent.  The api supports subscriptions to data stream and event channels.  Communication is based on channel names. These are unique strings used to identify each channel a user can subscribe to.   In the example code I have used the name of the sensor instance underscore description of the data (ex - "nora_tempReadings"), however the string can be anything as long as no other channel name is the same.
 
 ##Dependencies
 *    Sensor Classes (ex. TMP1x2, LIS3MDL)
@@ -49,8 +49,8 @@ api <- AgentSideSensorAPI(readingInterval, reportingInterval, bullwinkle);
 Parameter     | Name       | Description
 :-------------|:-----------|:-----------
 1st           | Sensor Type|A string that is shown to users who request `#getSensors`
-2nd (optional)| Streams    |An array of all available data streams' subscription commands for the sensor.
-3rd (optional)| Events     |A table of all available events for the sensor. Keys are the subscription command.  Values are a table of parameters used to configure the event.
+2nd (optional)| Streams    |An array of all available data streams' channel names for the sensor.
+3rd (optional)| Events     |A table of all available events for the sensor. Keys are the channel name.  Values are a table of parameters used to configure the event.
 
 ######Code Example:
 ```
@@ -59,6 +59,8 @@ api.addSensor("temp", ["nora_tempReadings"], { "nora_tempThermostat" : {"low": 2
 
 
 #### #setBroadcastCallback
+Use this function to handle the data coming from the device.  This callback should parse the data, and pass it on to your database or webhook.
+
 Parameter     | Name        | Description
 :-------------|:------------|:-----------
 1st           | callback    |A function that will run everytime the agent receives data from the device.
@@ -135,7 +137,7 @@ api.updateReportingInterval(30);
 Parameter     | Name           | Description
 :-------------|:---------------|:-----------
 1st           |Sensor ID       |The ID of the sensor. The ID is in the table returned by calling `#getSensors`.
-2nd           |Event           |The subscription command for the event.
+2nd           |Event           |The channel name for the event.
 3rd           |New Event Params|A table containing the new parameters for the event.
 
 ######Code Example:
@@ -161,7 +163,7 @@ api.activateStreams([0]);
 Parameter     | Name           | Description
 :-------------|:---------------|:-----------
 1st           |Sensor ID       |The ID of the sensor. The ID is in the table returned by calling `#getSensors`.
-2nd           |Stream          |The subscription command for the stream.
+2nd           |Stream          |The channel name for the stream.
 
 ######Code Example:
 ```
@@ -172,7 +174,7 @@ api.activateAStream(0, "nora_tempReadings");
 Parameter     | Name           | Description
 :-------------|:---------------|:-----------
 1st           |Sensor ID       |The ID of the sensor. The ID is in the table returned by calling `#getSensors`.
-2nd           |Event           |The subscription command for the event.
+2nd           |Event           |The channel name for the event.
 
 ######Code Example:
 ```
@@ -203,7 +205,7 @@ api.deactivateStreams([0]);
 Parameter     | Name           | Description
 :-------------|:---------------|:-----------
 1st           |Sensor ID       |The ID of the sensor. The ID is in the table returned by calling `#getSensors`.
-2nd           |Stream           |The subscription command for the stream.
+2nd           |Stream           |The channel name for the stream.
 
 ######Code Example:
 ```
@@ -213,7 +215,7 @@ api.deactivateAStream(0, "nora_tempReadings");
 Parameter     | Name           | Description
 :-------------|:---------------|:-----------
 1st           |Sensor ID       |The ID of the sensor. The ID is in the table returned by calling `#getSensors`.
-2nd           |Event           |The subscription command for the event.
+2nd           |Event           |The channel name for the event.
 
 ######Code Example:
 ```
@@ -282,7 +284,7 @@ function resetEvents() {
 ```
 
 ###Agent/Device Communication table
-Keys are the subscription command.
+Keys are the channel name.
 Values are the function to be run when we subscribe to stream/event. For streams this function should return the data you would like to stream.  For an event this function should set the parameters for the event.
 
 ######Code Example:
@@ -298,7 +300,7 @@ sensorSubscriptionFunctionsByCommand <- {
 Parameter     | Name                           | Description
 :-----------|:-------------------------------|:-----------
 1st                |Name                            |Used to namespace NV table.
-2nd               |Agent/Device Communication table|The table of subscription command keys and subscription function values.
+2nd               |Agent/Device Communication table|The table of channel name keys and subscription function values.
 3rd               |Bullwinkle                      |An instance of the Bullwinkle class.
 4th (optional)|Event Off function              |A function that turns off all events.
 
@@ -313,7 +315,7 @@ For each event we need some additional set up.  `#setUpEvent`  takes in the addi
 
 Parameter  | Name                    | Description
 :-------- |:------------------------|:-----------
-1st            |Event                    |Subscription command for the event.
+1st            |Event                    |channel name for the event.
 2nd           |Pin                      |The interrupt pin for the event.
 3rd           |Polarity                 |Polarity of the interrupt pin when event is triggered.
 4th           |Event Triggered function |A function that runs when event is triggered. Function should `return` data or message for the end user.

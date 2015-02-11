@@ -953,19 +953,12 @@ class LIS3MDL {
 }
 
 /******************** Sensor Setup ********************/
-//when we initialize our sensor this is the variable we will store it in
-noraTemp <- null;
-
-//hardware config for temp sensor on nora
-// 8-bit left-justified I2C address (Just an example.)
-const TMP1x2_ADDR = 0x92;
-
 //need to configure all sensor pins even if sensor is not active
-hardware.pinA.configure(DIGITAL_IN);
-hardware.pinB.configure(DIGITAL_IN);
-hardware.pinC.configure(DIGITAL_IN);
-hardware.pinD.configure(DIGITAL_IN);
-hardware.pinE.configure(DIGITAL_IN);
+hardware.pinA.configure(DIGITAL_IN);    //BARO
+hardware.pinB.configure(DIGITAL_IN);    //ACCEL
+hardware.pinC.configure(DIGITAL_IN);    //MAG
+hardware.pinD.configure(DIGITAL_IN);    //ALS
+hardware.pinE.configure(DIGITAL_IN);    //TMP102
 // Alert pin
 hardware.pin1.configure(DIGITAL_IN_WAKEUP);
 
@@ -973,7 +966,14 @@ hardware.pin1.configure(DIGITAL_IN_WAKEUP);
 i2c         <- hardware.i2c89;
 i2c.configure(CLOCK_SPEED_400_KHZ);
 
-mag <- LIS3MDL(i2c); //needs to be initialized for event wakeup to function on nora??
+//when we initialize our sensor this is the variable we will store it in
+noraTemp <- null;
+
+// 8-bit left-justified I2C address for temp sensor on nora
+const TMP1x2_ADDR = 0x92;
+
+//needs to be initialized for event wakeup to function on nora??
+mag <- LIS3MDL(i2c);
 
 //helper initialize function
 function initializeTemp() {
@@ -994,6 +994,7 @@ sensorSubscriptionFunctionsByCommand <- { "nora_tempReadings" : function() { ini
                                           "nora_tempThermostat" : function(params) { setUpTempThermostat(params); },
                                         }
 
+
 //this should clear all events - need this if we want the ability to unsubscribe from an event
 //currently this is not working!
 function resetEvents() {
@@ -1007,7 +1008,6 @@ class deviceSideSensorAPI {
      _eventTracker = { "triggered" : false,
                        "events" : [] };
     //table that stores event specific info - pin, polarity, callback
-    _eventConfig = {};
     _bullwinkle = null;
     _commands = null;
     _clearEventsFunction = null;
@@ -1047,18 +1047,19 @@ class deviceSideSensorAPI {
     }
 
     function setUpEvent(eventCommand, wakePin, eventTriggerPolarity, callback) {
-        if(!(eventCommand in _eventConfig)) {_eventConfig[eventCommand] <- {}};
-        _eventConfig[eventCommand] <- { "pin" : wakePin,
-                                        "eventPolarity" : eventTriggerPolarity,
-                                        "callback" : callback };
         local root = getroottable();
         if(!("nv" in root)) { root.nv <- {} };
+        if(!("eventConfig" in nv)) { nv["eventConfig"] <- {}; };
+        if(!(eventCommand in nv.eventConfig)) {nv.eventConfig[eventCommand] <- {}};
+        nv.eventConfig[eventCommand] <- { "pin" : wakePin,
+                                          "eventPolarity" : eventTriggerPolarity,
+                                          "callback" : callback };
         if(!("eventPins" in nv)) { nv["eventPins"] <- {}; };
         if(!(wakePin in nv.eventPins)) { nv.eventPins[wakePin] <- null};
     }
 
     function triggerEvent() {
-        foreach(event, settings in _eventConfig) {
+        foreach(event, settings in nv.eventConfig) {
             foreach(pin, reading in nv.eventPins) {
                 if(pin == settings.pin && reading == settings.eventPolarity) {
                     nv[data]["sensorReadings"][event].push(settings.callback());
@@ -1281,6 +1282,11 @@ api.setUpEvent("nora_tempThermostat", "pinE", 0, function(){ initializeTemp(); r
                                         "activeEvents" : { "sensorTail_themostat" : {low: 20, high: 30} }
                                     }
                                  },
+          eventConfig: { "noraTemp_thermostat" : {"pin" : "pinE", "eventTriggerPolarity" : 0, "callback" : function(){ initializeTemp(); return noraTemp.readTempC();} },
+                         "nora_baro" : {"pin" : "pinA", "eventTriggerPolarity" : 1, "callback" : function(){server.log("barometer event")} },
+                         "nora_accel" : {"pin" : "pinB", "eventTriggerPolarity" : 1, "callback" : function(){server.log("accel event")} },
+                         "nora_mag" : {"pin" : "pinC", "eventTriggerPolarity" : 0, "callback" : function(){server.log("mag event")} },
+                         "nora_als" : {"pin" : "pinD", "eventTriggerPolarity" : 0, "callback" : function(){server.log("als event")} } }
           eventPins: {"pinE":null, "pinA": null},
         }
 */
@@ -1305,7 +1311,7 @@ api.setUpEvent("nora_tempThermostat", "pinE", 0, function(){ initializeTemp(); r
                   };
 */
 
-
+//move into nv!!
 /* _eventConfig <- { "noraTemp_thermostat" : {"pin" : "pinE", "eventTriggerPolarity" : 0, "callback" : function(){ initializeTemp(); return noraTemp.readTempC();} },
                      "nora_baro" : {"pin" : "pinA", "eventTriggerPolarity" : 1, "callback" : function(){server.log("barometer event")} },
                      "nora_accel" : {"pin" : "pinB", "eventTriggerPolarity" : 1, "callback" : function(){server.log("accel event")} },

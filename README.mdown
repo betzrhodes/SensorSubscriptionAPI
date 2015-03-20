@@ -11,18 +11,18 @@ Used to create a pub/sub stream of sensor data between device and agent.  The ap
 #Agent Side API
 
 ###List of Functions
-*   `#addSensor`
+*   `#configureChannel`
 *   `#setBroadcastCallback`
-*   `#getSensors`
+*   `#getChannels`
 *   `#updateReportingInterval`
 *   `#updateReadingInterval`
 *   `#updateEventParams`
-*   `#activateStreams`
-*   `#activateAStream`
+*   `#activateChannel`
+*   `#activateStream`
 *   `#activateEvent`
 *   `#activateAll`
-*   `#deactivateStreams`
-*   `#deactivateAStream`
+*   `#deactivateChannel`
+*   `#deactivateStream`
 *   `#deactivateEvent`
 *   `#deactivateAll`
 
@@ -30,11 +30,11 @@ Used to create a pub/sub stream of sensor data between device and agent.  The ap
 ##Setup
 
 ####Initialize the Agent API Class
-Parameter| Name             | Description
-:--------|:-----------------|:-----------
-1st      |Reading Interval  |The time in seconds between readings.
-2nd      |Reporting Interval|The time in seconds between internet connection/data sends.
-3rd      |Bullwinkle        |An instance of the Bullwinkle class.
+Parameter| Name             |  Type	| Description
+:--------|:-----------------|:---------|:--
+1st      |Reading Interval  | Integer	| Time in seconds between readings
+2nd      |Reporting Interval| Integer  | Time in seconds between internet connection/data sends
+3rd      |Bullwinkle        | Meta		| Instance of the Bullwinkle class
 
 ######Code Example:
 ```
@@ -45,12 +45,16 @@ api <- AgentSideSensorAPI(readingInterval, reportingInterval, bullwinkle);
 ```
 
 
-#### #addSensor
-Parameter     | Name       | Description
-:-------------|:-----------|:-----------
-1st           | Sensor Type|A string that is shown to users who request `#getSensors`
-2nd (optional)| Streams    |An array of all available data streams' channel names for the sensor.
-3rd (optional)| Events     |A table of all available events for the sensor. Keys are the channel name.  Values are a table of parameters used to configure the event.
+#### #configureChannel
+Configuring a channel is where you will define all the streams and events available to a channel.  The information entered will need to match your device side code.  The "command name" is a unique string and must match the key in the device's Agent/Device Communication table (in this example the table is called sensorSubscriptionFunctionsByCommand).  Event Parameters should be a table and must match the code you have written on the device.
+
+
+Parameter     | Name       | Type    | Description
+:-------------|:-----------|:--------|:------------
+1st           | Sensor Type| String  | Description of sensor data type
+2nd (optional)| Streams    | Array   | Contains stream "command names"
+3rd (optional)| Events     | Table   | Keys are event "command names" : Values are the parameters for event
+
 
 ######Code Example:
 ```
@@ -61,9 +65,9 @@ api.addSensor("temp", ["nora_tempReadings"], { "nora_tempThermostat" : {"low": 2
 #### #setBroadcastCallback
 Use this function to handle the data coming from the device.  This callback should parse the data, and pass it on to your database or webhook.
 
-Parameter     | Name        | Description
-:-------------|:------------|:-----------
-1st           | callback    |A function that will run everytime the agent receives data from the device.
+Parameter     | Name        | Type     | Description
+:-------------|:----------- |:-------- |:------------
+1st           | callback    | Function | A function that will run everytime the agent receives data from the device.
 
 ######Code Example:
 ```
@@ -72,27 +76,27 @@ api.setBroadcastCallback(printData);
 ```
 
 
-#### #getSensors
+#### #getChannels
 `returns` a json string containing the current settings.
 
 ######Code Example:
 ```
-api.getSensors();
+api.getChannels();
 ```
 ######Result
 ```
 { "agentID": "Yke-5UZ58oI1",
   "readingInterval": 15,
   "reportingInterval": 60,
-  "sensors": [ { "sensorID": 0,
-                 "type": "temp",
+  "channels": [ { "channelID": 0,
+                 "type": "temperature",
                  "active": true,
                  "activeStreams": [ "nora_tempReadings" ],
                  "activeEvents": { "nora_tempThermostat": { "high": 30, "low": 29 } },
                  "availableStreams": [ "nora_tempReadings" ],
                  "availableEvents": { "nora_tempThermostat": { "high": 30, "low": 29 } },
                },
-               { "sensorID": 1,
+               { "channelID": 1,
                  "type": "magnitometer",
                  "active": false,
                  "activeStreams": [ ],
@@ -110,9 +114,9 @@ api.getSensors();
 
 NOTE: This change will not go into effect until the device connects to the agent.
 
-Parameter     | Name                | Description
-:-------------|:--------------------|:-----------
-1st           |New Reading Interval |The time in seconds between readings.
+Parameter     | Name                | Type		| Description
+:-------------|:--------------------|:--------|:--------------
+1st           |New Reading Interval |Integer	|The time in seconds between readings
 
 
 ######Code Example:
@@ -124,9 +128,9 @@ api.updateReadingInterval(10);
 
 NOTE: This change will not go into effect until the device connects to the agent.
 
-Parameter     | Name                  | Description
-:-------------|:----------------------|:-----------
-1st           |New Reporting Interval |The time in seconds between internet connection/data sends.
+Parameter     | Name                  | Type	| Description
+:-------------|:--------------------|:--------|:--------------
+1st           |New Reporting Interval |Integer	|The time in seconds between internet connection/data sends
 
 ######Code Example:
 ```
@@ -134,11 +138,11 @@ api.updateReportingInterval(30);
 ```
 
 #### #updateEventParams
-Parameter     | Name           | Description
-:-------------|:---------------|:-----------
-1st           |Sensor ID       |The ID of the sensor. The ID is in the table returned by calling `#getSensors`.
-2nd           |Event           |The channel name for the event.
-3rd           |New Event Params|A table containing the new parameters for the event.
+Parameter     | Name           | Type	 	| Description
+:-------------|:---------------|:-----  	|:------------
+1st           |Channel ID      |Integer	| The ID of the channel. The ID is in the table returned by calling `#getChannels`
+2nd           |Event           |String		|The command name for the event
+3rd           |New Event Params|Table 		|New parameters for the event
 
 ######Code Example:
 ```
@@ -148,10 +152,10 @@ api.updateEventParams(0, "nora_tempThermostat", {"low": 28})
 
 ##Activation
 
-#### #activateStreams
-Parameter     | Name           | Description
-:-------------|:---------------|:-----------
-1st (optional)|Sensor IDs      |An Array of sensor IDs. Will subscribe to all streams for each sensor in the array.  If no parameter is passed in will subscribe to all streams for all sensors.
+#### #activateChannel
+Parameter     | Name           | Type		| Description
+:-------------|:---------------|:-------	|:------------
+1st (optional)|Channel IDs     | Array 	| If no parameter is passed in, will subscribe to all streams on all channels. If array given, will subscribe to all streams for each channel in the array.  
 
 ######Code Example:
 ```
@@ -159,11 +163,11 @@ api.activateStreams();
 api.activateStreams([0]);
 ```
 
-#### #activateAStream
-Parameter     | Name           | Description
-:-------------|:---------------|:-----------
-1st           |Sensor ID       |The ID of the sensor. The ID is in the table returned by calling `#getSensors`.
-2nd           |Stream          |The channel name for the stream.
+#### #activateStream
+Parameter     | Name           | Type		| Description
+:-------------|:---------------|:---------	|:------------
+1st           |Channel ID      |Integer	| The ID of the channel. The ID is in the table returned by calling `#getChannels`.
+2nd           |Stream          | String	| The command name for the stream.
 
 ######Code Example:
 ```
@@ -171,10 +175,10 @@ api.activateAStream(0, "nora_tempReadings");
 ```
 
 #### #activateEvent
-Parameter     | Name           | Description
-:-------------|:---------------|:-----------
-1st           |Sensor ID       |The ID of the sensor. The ID is in the table returned by calling `#getSensors`.
-2nd           |Event           |The channel name for the event.
+Parameter     | Name           | Type		| Description
+:-------------|:---------------|:---------	|:------------
+1st           |Channel ID      |Ingeter	| The ID of the channel. The ID is in the table returned by calling `#getChannels`.
+2nd           |Event           |The command name for the event.
 
 ######Code Example:
 ```
@@ -183,17 +187,17 @@ api.activateEvent(0, "nora_tempThermostat");
 
 #### #activateAll
 
-Will activate all events and streams for all sensors.
+Will activate all events and streams for all channels.
 
 ######Code Example:
 ```
 api.activateAll();
 ```
 
-#### #deactivateStreams
-Parameter     | Name           | Description
-:-------------|:---------------|:-----------
-1st (optional)|Sensor IDs      |An Array of sensor IDs. Will unsubscribe from all streams for each sensor in the array.  If no parameter is passed in will unsubscribe from all streams for all sensors.
+#### #deactivateChannel
+Parameter     | Name           | Type		|Description
+:-------------|:---------------|:---------	|:----------
+1st (optional)|Channel IDs     |Array 		|If no parameter is passed in, will unsubscribe from all streams on all channels. If array given, will unsubscribe from all streams for each channel in the array.
 
 ######Code Example:
 ```
@@ -201,21 +205,21 @@ api.deactivateStreams();
 api.deactivateStreams([0]);
 ```
 
-#### #deactivateAStream
-Parameter     | Name           | Description
-:-------------|:---------------|:-----------
-1st           |Sensor ID       |The ID of the sensor. The ID is in the table returned by calling `#getSensors`.
-2nd           |Stream           |The channel name for the stream.
+#### #deactivateStream
+Parameter     | Name           | Type		|Description
+:-------------|:---------------|:---------	|:----------
+1st           |Channel ID      | Integer	|The ID of the channel. The ID is in the table returned by calling `#getChannels`.
+2nd           |Stream          | String	|The command name for the stream.
 
 ######Code Example:
 ```
 api.deactivateAStream(0, "nora_tempReadings");
 ```
 #### #deactivateEvent
-Parameter     | Name           | Description
-:-------------|:---------------|:-----------
-1st           |Sensor ID       |The ID of the sensor. The ID is in the table returned by calling `#getSensors`.
-2nd           |Event           |The channel name for the event.
+Parameter     | Name           | Type		|Description
+:-------------|:---------------|:---------	|:----------
+1st           |Channel ID      |Integer	|The ID of the channel. The ID is in the table returned by calling `#getChannels`.
+2nd           |Event           |String		|The command name for the event.
 
 ######Code Example:
 ```
@@ -223,7 +227,7 @@ api.deactivateEvent(0, "nora_tempThermostat");
 ```
 #### #deactivateAll
 
-Will deactivate all events and streams for all sensors.
+Will deactivate all events and streams for all channels.
 
 ######Code Example:
 ```
@@ -284,9 +288,8 @@ function resetEvents() {
 ```
 
 ###Agent/Device Communication table
-Keys are the channel name.
-Values are the function to be run when we subscribe to stream/event. For streams this function should return the data you would like to stream.  For an event this function should set the parameters for the event.
-
+This table contains the functions that will be run when a user subscribes to a stream or event.  Keys are the command name that matches those used when configuring channels.  Values are the function to be run when a user subscribes to that stream or event. For streams this function should initialize the sensor and return the data you would like to stream.  For an event this function should initialize and set the parameters for the event.
+ NOTE: Events will need additional set up to configure what happens when an event is triggered.  This setup happens after we initialize the DeviceAPI class.
 ######Code Example:
 ```
 sensorSubscriptionFunctionsByCommand <- {
@@ -297,28 +300,27 @@ sensorSubscriptionFunctionsByCommand <- {
 
 ###Initialize Device API class
 
-Parameter     | Name                           | Description
-:-----------|:-------------------------------|:-----------
-1st                |Name                            |Used to namespace NV table.
-2nd               |Agent/Device Communication table|The table of channel name keys and subscription function values.
-3rd               |Bullwinkle                      |An instance of the Bullwinkle class.
-4th (optional)|Event Off function              |A function that turns off all events.
+Parameter  		| Name                           |Type 	|Description
+:----------		|:-------------------------------|:------	|:---
+1st       		|Agent/Device Communication table|Table	|Keys command name : values subscription function
+2nd       		|Bullwinkle                      |Meta	|Instance of the Bullwinkle class
+3rd (optional)	|Event Off function              |Function	|Function that deactivates all events
 
 ######Code Example:
 ```
 bullwinkle <- Bullwinkle();
-api <- deviceSideSensorAPI("nora", sensorSubscriptionFunctionsByCommand, bullwinkle, resetEvents);
+api <- deviceSideSensorAPI(sensorSubscriptionFunctionsByCommand, bullwinkle, resetEvents);
 ```
 
 #### #setUpEvent
 For each event we need some additional set up.  `#setUpEvent`  takes in the additional info for each event.
 
-Parameter  | Name                    | Description
-:-------- |:------------------------|:-----------
-1st            |Event                    |channel name for the event.
-2nd           |Pin                      |The interrupt pin for the event.
-3rd           |Polarity                 |Polarity of the interrupt pin when event is triggered.
-4th           |Event Triggered function |A function that runs when event is triggered. Function should `return` data or message for the end user.
+Parameter  	| Name                    |Type		| Description
+:-------- 	|:------------------------|:------	|:-----------
+1st        	|Event                    |String	|Command name for the event
+2nd       	|Pin                      |String	|The interrupt pin for the event
+3rd        	|Polarity                 |Integer	|Polarity of the interrupt pin when event is triggered
+4th       	|Event Triggered function |Function|Function that runs when event is triggered. Function should `return` data or message for the end user
 
 ######Code Example:
 ```

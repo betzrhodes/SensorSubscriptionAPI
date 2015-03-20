@@ -852,7 +852,7 @@ class Bullwinkle_Session {
 bullwinkle <- Bullwinkle();
 
 /******************** API Class *****************/
-class AgentSideSensorAPI {
+class AgentcIDeSensorAPI {
     _agentID = null;
     _bullwinkle = null;
     _sensorSettings = null;
@@ -866,7 +866,7 @@ class AgentSideSensorAPI {
         _sensorSettings = { "agentID" : _agentID,
                             "reportingInterval" : reportingInterval,
                             "readingInterval" : readingInterval,
-                            "sensors" : [] };
+                            "channels" : [] };
         init();
     }
 
@@ -876,7 +876,7 @@ class AgentSideSensorAPI {
         _bullwinkle.on("ack", _successfulCommunicationResponse.bindenv(this));
     }
 
-    function addSensor (type, availStreams=[], availEvents={}) {
+    function configureChannel (type, availStreams=[], availEvents={}) {
         if(typeof availStreams != "array" && typeof availStreams == "table") {
             availEvents = availStreams;
             availStreams = [];
@@ -886,8 +886,8 @@ class AgentSideSensorAPI {
             availEvents = {};
         }
         if(typeof type == "string" && typeof availStreams == "array" && typeof availEvents == "table") {
-            local id = _sensorSettings.sensors.len();
-            _sensorSettings.sensors.push({ "sensorID" : id,
+            local id = _sensorSettings.channels.len();
+            _sensorSettings.channels.push({ "channelID" : id,
                                           "type" : type,
                                           "active" : false,
                                           "availableStreams" : availStreams,
@@ -901,29 +901,29 @@ class AgentSideSensorAPI {
         _broadcastCallback = callback;
     }
 
-    function getSensors() {
+    function getChannels() {
         return http.jsonencode(_sensorSettings);
     }
 
     // subscribe to 1, some, all sensors (this will turn on all streams for a given sensor)
-    // takes an array of sensorIDs as a parameter (if no parameter then will subscribe to all sensors)
-    function activateStreams(sensorIDs=null) {
-        //if no sensorId given create an array of all sensorIDs
-        if(!sensorIDs) { sensorIDs = _createSensorIDArray(); }
-        foreach(sID in sensorIDs) {
-            _sensorSettings.sensors[sID].activeStreams = _sensorSettings.sensors[sID].availableStreams;
+    // takes an array of channelIDs as a parameter (if no parameter then will subscribe to all sensors)
+    function activateChannels(channelIDs=null) {
+        //if no channelID given create an array of all channelIDs
+        if(!channelIDs) { channelIDs = _createchannelIDArray(); }
+        foreach(cID in channelIDs) {
+            _sensorSettings.channels[cID].activeStreams = _sensorSettings.channels[cID].availableStreams;
             //change status to active if it isn't
-            if( _sensorSettings.sensors[sID].activeStreams.len() > 0 && !(_sensorSettings.sensors[sID].active) ) {
-                _sensorSettings.sensors[sID].active = true;
+            if( _sensorSettings.channels[cID].activeStreams.len() > 0 && !(_sensorSettings.channels[cID].active) ) {
+                _sensorSettings.channels[cID].active = true;
             }
             _settingsChanged = true;
         }
     }
 
-    function activateAStream(sensorID, stream) {
-        if(stream in _sensorSettings.sensors[sensorID].availableStreams) {
-            _sensorSettings.sensors[sensorID].activeStreams.push(stream);
-            _sensorSettings.sensors[sID].active = true;
+    function activateStream(channelID, stream) {
+        if(stream in _sensorSettings.channels[channelID].availableStreams) {
+            _sensorSettings.channels[channelID].activeStreams.push(stream);
+            _sensorSettings.channels[cID].active = true;
             _settingsChanged = true;
         }
     }
@@ -931,24 +931,24 @@ class AgentSideSensorAPI {
     // subscribe to specific event
     // example parameters - (1, "sensorTail_themostat", [20, 30])
     // if no eventParams are passed in then default params for event will be used
-    function activateEvent(sensorID, event, eventParams=null) {
-        if(event in _sensorSettings.sensors[sensorID].availableEvents) {
-            if(eventParams == null) { eventParams = _sensorSettings.sensors[sensorID].availableEvents[event] };
-            _sensorSettings.sensors[sensorID].activeEvents[event] <- eventParams;
-            _sensorSettings.sensors[sensorID].active = true;
+    function activateEvent(channelID, event, eventParams=null) {
+        if(event in _sensorSettings.channels[channelID].availableEvents) {
+            if(eventParams == null) { eventParams = _sensorSettings.channels[channelID].availableEvents[event] };
+            _sensorSettings.channels[channelID].activeEvents[event] <- eventParams;
+            _sensorSettings.channels[channelID].active = true;
             _settingsChanged = true;
         }
     }
 
     //subscribes to all streams & events with default settings
     function activateAll() {
-        local sensorIDs = _createSensorIDArray();
-        foreach(sID in sensorIDs) {
-            _sensorSettings.sensors[sID].activeStreams = _sensorSettings.sensors[sID].availableStreams;
-            _sensorSettings.sensors[sID].activeEvents = _sensorSettings.sensors[sID].availableEvents;
+        local channelIDs = _createchannelIDArray();
+        foreach(cID in channelIDs) {
+            _sensorSettings.channels[cID].activeStreams = _sensorSettings.channels[cID].availableStreams;
+            _sensorSettings.channels[cID].activeEvents = _sensorSettings.channels[cID].availableEvents;
             //change status to active if it isn't
-            if( !(_sensorSettings.sensors[sID].active) && (_sensorSettings.sensors[sID].activeStreams.len() > 0 || _sensorSettings.sensors[sID].activeEvents.len() > 0) ) {
-                _sensorSettings.sensors[sID].active = true;
+            if( !(_sensorSettings.channels[cID].active) && (_sensorSettings.channels[cID].activeStreams.len() > 0 || _sensorSettings.channels[cID].activeEvents.len() > 0) ) {
+                _sensorSettings.channels[cID].active = true;
             }
             _settingsChanged = true;
         }
@@ -956,43 +956,43 @@ class AgentSideSensorAPI {
 
     //unsubscribes form all streams & events
     function deactivateAll() {
-        local sensorIDs = _createSensorIDArray();
-        foreach(sID in sensorIDs) {
-            _sensorSettings.sensors[sID].activeStreams = {};
-            _sensorSettings.sensors[sID].activeEvents = {};
-            if(_sensorSettings.sensors[sID].active) { _sensorSettings.sensors[sID].active = false };
+        local channelIDs = _createchannelIDArray();
+        foreach(cID in channelIDs) {
+            _sensorSettings.channels[cID].activeStreams = {};
+            _sensorSettings.channels[cID].activeEvents = {};
+            if(_sensorSettings.channels[cID].active) { _sensorSettings.channels[cID].active = false };
             _settingsChanged = true;
         }
     }
 
     // unsubscribe to 1, some, all sensors (this will turn off all streams & events for the given sensors)
-    // takes an array of sensorIDs as a parameter (if no parameter then will subscribe to all)
-    function deactivateStreams(sensorIDs=null) {
-        if(!sensorIDs) { sensorIDs = _createSensorIDArray() };
-        foreach(sID in sensorIDs) {
-            _sensorSettings.sensors[sID].activeStreams = {};
-            if(_sensorSettings.sensors[sID].active && _sensorSettings.sensors[sID].activeStreams.len() == 0 && _sensorSettings.sensors[sID].activeEvents.len() == 0) {
-                _sensorSettings.sensors[sID].active = false;
+    // takes an array of channelIDs as a parameter (if no parameter then will subscribe to all)
+    function deactivateChannels(channelIDs=null) {
+        if(!channelIDs) { channelIDs = _createchannelIDArray() };
+        foreach(cID in channelIDs) {
+            _sensorSettings.channels[cID].activeStreams = {};
+            if(_sensorSettings.channels[cID].active && _sensorSettings.channels[cID].activeStreams.len() == 0 && _sensorSettings.channels[cID].activeEvents.len() == 0) {
+                _sensorSettings.channels[cID].active = false;
             }
             _settingsChanged = true;
         }
     }
 
-    function deactivateAStream(sensorID, stream) {
-        if(stream in _sensorSettings.sensors[sensorID].activeStreams) {
-            _sensorSettings.sensors[sensorID].activeStreams.remove( _sensorSettings.sensors[sensorID].activeStreams.find(stream) );
-            if(_sensorSettings.sensors[sID].active && _sensorSettings.sensors[sID].activeStreams.len() == 0 && _sensorSettings.sensors[sID].activeEvents.len() == 0) {
-                _sensorSettings.sensors[sID].active = false;
+    function deactivateStream(channelID, stream) {
+        if(stream in _sensorSettings.channels[channelID].activeStreams) {
+            _sensorSettings.channels[channelID].activeStreams.remove( _sensorSettings.channels[channelID].activeStreams.find(stream) );
+            if(_sensorSettings.channels[cID].active && _sensorSettings.channels[cID].activeStreams.len() == 0 && _sensorSettings.channels[cID].activeEvents.len() == 0) {
+                _sensorSettings.channels[cID].active = false;
             }
             _settingsChanged = true;
         }
     }
 
-    function deactivateEvent(sensorID, event) {
-        if(event in _sensorSettings.sensors[sensorID].activeEvents) {
-            _sensorSettings.sensors[sensorID].activeEvents.rawdelete(event);
-            if(_sensorSettings.sensors[sID].active && _sensorSettings.sensors[sID].activeStreams.len() == 0 && _sensorSettings.sensors[sID].activeEvents.len() == 0) {
-                _sensorSettings.sensors[sID].active = false;
+    function deactivateEvent(channelID, event) {
+        if(event in _sensorSettings.channels[channelID].activeEvents) {
+            _sensorSettings.channels[channelID].activeEvents.rawdelete(event);
+            if(_sensorSettings.channels[cID].active && _sensorSettings.channels[cID].activeStreams.len() == 0 && _sensorSettings.channels[cID].activeEvents.len() == 0) {
+                _sensorSettings.channels[cID].active = false;
             }
             _settingsChanged = true;
         }
@@ -1014,9 +1014,9 @@ class AgentSideSensorAPI {
         }
     }
 
-    function updateEventParams(sensorID, event, params) {
-        if(_sensorSettings["sensors"].len() > sensorID && event in _sensorSettings["sensors"][sensorID]["availableEvents"]) {
-            _sensorSettings["sensors"][sensorID]["availableEvents"][event] = params;
+    function updateEventParams(channelID, event, params) {
+        if(_sensorSettings["sensors"].len() > channelID && event in _sensorSettings["sensors"][channelID]["availableEvents"]) {
+            _sensorSettings["sensors"][channelID]["availableEvents"][event] = params;
             _settingsChanged = true;
         }
     }
@@ -1044,7 +1044,7 @@ class AgentSideSensorAPI {
         local activeSensorSettings = { "reportingInterval" : _sensorSettings.reportingInterval,
                                       "readingInterval" : _sensorSettings.readingInterval,
                                       "subscriptions" : {} };
-        foreach(sensor in _sensorSettings.sensors) {
+        foreach(sensor in _sensorSettings.channels) {
             if(sensor.active) {
                 if(sensor.activeStreams.len() > 0) {
                     if (!("activeStreams" in activeSensorSettings["subscriptions"])) {
@@ -1064,9 +1064,9 @@ class AgentSideSensorAPI {
     }
 
     //helper for subscription events for all sensors
-    function _createSensorIDArray() {
+    function _createchannelIDArray() {
         local ids = [];
-            for (local i = 0; i < _sensorSettings.sensors.len(); i++) {
+            for (local i = 0; i < _sensorSettings.channels.len(); i++) {
                 ids.push(i);
             }
         return ids;
@@ -1084,7 +1084,7 @@ readingInterval <- 15;
 reportingInterval <- 60;
 
 //initialize our communication class
-api <- AgentSideSensorAPI(readingInterval, reportingInterval, bullwinkle);
+api <- AgentcIDeSensorAPI(readingInterval, reportingInterval, bullwinkle);
 
 //generic print function to use as broadcastCallback
 function printData(data) {
@@ -1092,19 +1092,22 @@ function printData(data) {
 }
 
 //set callback for how to broadcast data
+//this callback should interface with your db or webAPI
 api.setBroadcastCallback(printData);
 
-//add a sensor to the api
-//params - type of sensor(what you want to display to user of api),
-//array of streams names/commands - this needs to be the same as the name/command in sensorSubscriptionFunctionsByCommand on the divice,
-//table with key of events/commands - this needs to be the same as the name/command in sensorSubscriptionFunctionsByCommand on the divice
-//and value a table of params - the key is the identifier to make parameters searchable on the divice side
-api.addSensor("temp", ["nora_tempReadings"], {"nora_tempThermostat" : {"low": 29, "high": 30}});
-//do this on the device side? and import settings?? - not a great idea
-//rename - this assigns channels to sensors, and sets default params, and sets a sensor type
+/*  configure a channel
+    params -
+        string - description of sensor data type,
+        array - contains stream "command names"
+        table - keys are event "command names" : values are the parameters for event
+
+    notes - the "command names" need to match the device cIDe "command names" in sensorSubscriptionFunctionsByCommand table
+          - parameters can be set up in any format so long as it matches the device cIDe code you have written */
+api.configureChannel("temp", ["nora_tempReadings"], {"nora_tempThermostat" : {"low": 27, "high": 28}});
+
 
 //run time tests
-server.log(api.getSensors());
+server.log(api.getChannels());
 // api.activateAll();
 // server.log(api.getSensors());
 // imp.wakeup(130, function() {
@@ -1112,10 +1115,10 @@ server.log(api.getSensors());
 //     server.log(api.getSensors());
 // }.bindenv(api));
 
-// imp.wakeup(190, api.activateStreams.bindenv(api));
-// imp.wakeup(245, api.deactivateStreams.bindenv(api));
+// imp.wakeup(190, api.activateChannels.bindenv(api));
+// imp.wakeup(245, api.deactivateChannels.bindenv(api));
 
-api.activateStreams([0])
+api.activateChannels([0])
 imp.wakeup(50, function() { api.updateReadingInterval(10); }.bindenv(api))
 imp.wakeup(50, function() { api.updateReportingInterval(30); }.bindenv(api))
 
@@ -1134,7 +1137,7 @@ api.activateEvent(0, "nora_tempThermostat");
 
 */
 
-//device side nv table
+//device cIDe nv table
 /*nv:   { envSensorTailData: {  "nextWakeUp": 1422306809,
                                 "nextConnection": 1422306864,
                                 "sensorReadings": { "sensorTail_tempReadings" : [ readings... ],
@@ -1152,6 +1155,7 @@ api.activateEvent(0, "nora_tempThermostat");
         }
 */
 
+//now in nv will also need to know if event stays in 'trigger' mode until threashold crossed or if event is a one off
 /* _eventConfig <- { "noraTemp_thermostat" : {"pin" : "pinE", "eventTriggerPolarity" : 0, "callback" : function(){ initializeTemp(); return noraTemp.readTempC();} },
                      "nora_baro" : {"pin" : "pinA", "eventTriggerPolarity" : 1, "callback" : function(){server.log("barometer event")} },
                      "nora_accel" : {"pin" : "pinB", "eventTriggerPolarity" : 1, "callback" : function(){server.log("accel event")} },
@@ -1159,3 +1163,7 @@ api.activateEvent(0, "nora_tempThermostat");
                      "nora_als" : {"pin" : "pinD", "eventTriggerPolarity" : 0, "callback" : function(){server.log("als event")} },
                     }
 */
+
+
+// _eventTracker = { "triggered" : false,
+//                       "events" : [] };

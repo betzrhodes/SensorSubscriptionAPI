@@ -973,7 +973,7 @@ noraTemp <- null;
 const TMP1x2_ADDR = 0x92;
 
 //needs to be initialized for event wakeup to function on nora??
-mag <- LIS3MDL(i2c);
+noraMag <- LIS3MDL(i2c);
 
 //helper initialize function
 function initializeTemp() {
@@ -998,7 +998,7 @@ sensorSubscriptionFunctionsByCommand <- { "nora_tempReadings" : function() { ini
 //this should clear all events - need this if we want the ability to unsubscribe from an event
 //currently this is not working!
 function resetEvents() {
-    if(noraTemp) { noraTemp.reset(); }
+    // if(noraTemp) { noraTemp.reset(); }
 }
 
 
@@ -1011,11 +1011,12 @@ class deviceSideSensorAPI {
     _bullwinkle = null;
     _commands = null;
     _clearEventsFunction = null;
+    _name = "sensor";
     settings = null;
     data = null;
 
     //_name is the the namespace used to store data in the nv table, commands is the table of sensor functions, bullwinkle is instance of bullwinkle
-    constructor(_name, commands, bullwinkle, clearEvents=null) {
+    constructor(commands, bullwinkle, clearEvents=null) {
         settings = _name + "Settings";
         data = _name + "Data";
         _commands = commands;
@@ -1027,15 +1028,11 @@ class deviceSideSensorAPI {
     function init() {
         if(hardware.wakereason() == WAKEREASON_TIMER) {
             server.log("WOKE UP B/C TIMER EXPIRED")
-            triggerTimerWakeUp();
+            takeSensorReadings();
         } else if(hardware.wakereason() == WAKEREASON_PIN) {
-            //this will be empty for the first few ms after any wakeup that erases nv
-            foreach(pin, reading in nv.eventPins) {
-                nv.eventPins[pin] = hardware[pin].read();
-            }
+            readEventPins();
             server.log("WOKE UP B/C PIN HIGH");
             _eventTracker.triggered = true;
-            //need to wait for event setup code to run - look for a better way to do this??
             imp.wakeup(0.001, function() {
                 triggerEvent();
                 sendEventData();
@@ -1062,8 +1059,8 @@ class deviceSideSensorAPI {
         foreach(event, settings in nv.eventConfig) {
             foreach(pin, reading in nv.eventPins) {
                 if(pin == settings.pin && reading == settings.eventPolarity) {
-                    nv[data]["sensorReadings"][event].push(settings.callback());
-                    _eventTracker.events.push(event);
+                    nv[data]["sensorReadings"][event].push(settings.callback()); //store data/msg for user to send on connect
+                    _eventTracker.events.push(event); //tracks which event was triggered
                 }
             }
         }
@@ -1144,6 +1141,7 @@ class deviceSideSensorAPI {
     }
 
     function clearEventData() {
+        _eventTracker.triggered = false;
         foreach(event in _eventTracker.events) {
             nv[data]["sensorReadings"][event] = [];
         }
@@ -1164,11 +1162,15 @@ class deviceSideSensorAPI {
             }
             sendData(d);
         } else {
-            sleep(determineNextWake());
+            if (hardware.pin1.read() == 1) {
+                determineEventPinAction();
+            } else {
+                sleep(determineNextReading());
+            }
         }
     }
 
-    function triggerTimerWakeUp() {
+    function takeSensorReadings() {
         nv[data]["nextWakeUp"] = nv[settings]["readingInterval"] + time();
         if("activeStreams" in nv[settings]["subscriptions"]) {
             foreach(stream in nv[settings]["subscriptions"]["activeStreams"]) {
@@ -1178,11 +1180,49 @@ class deviceSideSensorAPI {
         checkReportingInterval(); //sends data &/or sleeps
     }
 
-    function determineNextWake() {
+    function determineNextReading() {
         if( "activeStreams" in nv[settings]["subscriptions"] && nv[settings]["subscriptions"]["activeStreams"].len() > 0) {
             return nv[settings]["readingInterval"];
         } else {
             return nv[settings]["reportingInterval"];
+        }
+    }
+
+    function determineEventPinAction() {
+        local readingTimer = nv[data]["nextWakeUp"] - time();
+        if (hardware.pin1.read() == 1) { //stay awake search for events and continue to send data at scheduled intervals
+            readingTimer > 0 ? pollEvents() : takeSensorReadings();
+        } else { //go to sleep til next scheduled reading
+            resetEventTracker();
+            readingTimer > 0 ? sleep(readingTimer) : takeSensorReadings();
+        }
+    }
+
+    function pollEvents() {
+        readEventPins();
+        foreach(event, settings in nv.eventConfig) {
+            foreach(pin, reading in nv.eventPins) {
+                if (pin == settings.pin && reading == settings.eventPolarity) {
+                    if (_eventTracker.events.find(event) == null) {//found a new event
+                        nv[data]["sensorReadings"][event].push(settings.callback()); //store data/msg for user to send on next connect
+                        _eventTracker.events.push(event); //add event to event tracking array
+                        _eventTracker.triggered = true
+                    }
+                }
+            }
+        }
+        if (_eventTracker.triggered) {
+            sendEventData();
+        } else {
+            imp.wakeup(0.01, function() {
+                determineEventPinAction();
+            }.bindenv(this));
+        }
+    }
+
+    function readEventPins() {
+        foreach(pin, reading in nv.eventPins) {
+            nv.eventPins[pin] = hardware[pin].read();
         }
     }
 
@@ -1218,15 +1258,16 @@ class deviceSideSensorAPI {
                 } else {
                     if(_eventTracker.triggered) {
                         clearEventData();
-                        resetEventTracker();
-                        //this is not always the desired behavior for all sensors?? - thermostat for example
-                        local wakeUpTimer = nv[data]["nextWakeUp"] - time();
-                        wakeUpTimer > 0 ? sleep(wakeUpTimer) : triggerTimerWakeUp();
+                        determineEventPinAction();
                     } else {
                         nv[data]["nextWakeUp"] = nv[settings]["readingInterval"] + time();
                         nv[data]["nextConnection"] = nv[settings]["reportingInterval"] + time();
                         if("sensorReadings" in nv[data]) { clearReadingData() };
-                        sleep(determineNextWake());
+                        if (hardware.pin1.read() == 1) {
+                            determineEventPinAction();
+                        } else {
+                            sleep(determineNextReading());
+                        }
                     }
                 }
             }.bindenv(this))
@@ -1241,7 +1282,11 @@ class deviceSideSensorAPI {
     function agentComSuccessful() {
         _bullwinkle.send("ack", null)
             .onreply(function(context) {
-                sleep(determineNextWake());
+                if (hardware.pin1.read() == 1) {
+                    determineEventPinAction();
+                } else {
+                    sleep(determineNextReading());
+                }
             }.bindenv(this))
             .ontimeout(function(context) {
                 server.log("Received reply from command '" + context.command + "' after " + context.latency + "s");
@@ -1257,7 +1302,7 @@ class deviceSideSensorAPI {
 //initialize our sensor communications layer
 //params - name we want to use to store our data and settings under, our table of sensor setup functions,
 //          our bullwinkle instance, our event reset function(optional - don't need if we don't have events)
-api <- deviceSideSensorAPI("nora", sensorSubscriptionFunctionsByCommand, bullwinkle, resetEvents);
+api <- deviceSideSensorAPI(sensorSubscriptionFunctionsByCommand, bullwinkle, resetEvents);
 
 //if we have events we need to set up what happens when it is triggered
 //params - event/stream name(same as agent and subscription command), interrupt pin,

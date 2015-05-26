@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content>
+    <meta name="author" content>
+    <title>EI Office Sensors</title>
+
+    <link href="vendor/css/bootstrap.min.css" rel="stylesheet">
+    <link href="css/office_sensors.css" rel="stylesheet">
+
+  </head>
+  <body>
+    <!-- nav bar -->
+    <nav class="navbar navbar-inverse navbar-fixed-top" role="navigation">
+      <div class="container-fluid">
+        <div class="navbar-header">
+          <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target="#navbar" aria-expanded="false" aria-controls="navbar">
+            <span class="sr-only">Toggle navigation</span>
+            <span class="icon-bar"></span>
+            <span class="icon-bar"></span>
+            <span class="icon-bar"></span>
+          </button>
+          <div>
+            <a href="#"><img class="navbar-brand" src="img/electric-imp-logo-white.png"></a>
+            <a class="navbar-brand" href="#">Electric Imp Office Sensors</a>
+          </div>
+        </div>
+        <div id="navbar" class="navbar-collapse collapse">
+          <ul class="nav navbar-nav navbar-right">
+            <li data-nav-tab="dashboard" class="active"><a>Dashboard</a></li>
+            <li data-nav-tab="channels"><a>Channels</a></li>
+            <li data-nav-tab="settings"><a>Settings</a></li>
+          </ul>
+        </div>
+      </div>
+    </nav>
+
+    <!-- page -->
+    <div class="container-fluid">
+      <div class="row">
+        <!-- sidebar -->
+        <div class="col-sm-3 col-md-2 sidebar">
+          <div class="picture" style="width: 95%; margin: 0 auto 8% auto;">
+            <img id="ei-floorplan" src="img/floorplan_alpha.png" border="2" width="100%" usemap="#floorplan">
+            <map id="floorplan_map" name="floorplan">
+                <area shape="rect" name="maxwell" alt="Maxwell" coords="235,5,285,88" href="#">
+                <area shape="rect" name="hertz" alt="Hertz" coords="289,4,343,88" href="#">
+                <area shape="rect" name="faraday" alt="Faraday" coords="346,4,431,125" href="#">
+                <area shape="rect" name="gauss" alt="Gauss" coords="345,128,431,186" href="#">
+                <area shape="rect" name="ampere" alt="Ampere" shape="rect" coords="345,315,431,373" href="#">
+                <area shape="poly" name="reception" alt="Reception" coords="203,363.6363639831543,288,362.6363639831543,286,460.6363639831543,233,461.6363639831543,233,455.6363639831543,203,455.6363639831543" href="#">
+                <area shape="rect" name="volta" alt="Volta" coords="292,376,429,497" href="#">
+                <area shape="rect" name="balcfront" alt="Balcony" coords="2,196,16,309" href="#">
+                <area shape="rect" name="balcrear" alt="Balcony" coords="418,193,432,308" href="#">
+                <area shape="rect" name="closet" alt="Closet" coords="128,4,200,48" href="#">
+                <area shape="poly" name="openofficearea" alt="Open Office Area" coords="199,62,204,62,204,34,230,33,230,98,235,97,235,91,284,91,284,98,289,98,288,90,342,91,341,184,333,184,333,316.6666717529297,342,316.6666717529297,341,372.6666717529297,291,372.6666717529297,291,360.6666717529297,96,359.6666717529297,98,311.6666717529297,4,312.6666717529297,4,309.6666717529297,19,309.6666717529297,19,192.6666717529297,4,192.6666717529297,4,4,71,4,71,51,199,50" href="#">
+                <area shape="poly" name="watt" alt="Watt" coords="430.1999969482422,193,430.1999969482422,188,336.1999969482422,188,336.1999969482422,312,429.1999969482422,312,430.1999969482422,309,415.1999969482422,309,415.1999969482422,192" href="#">
+                <area shape="poly" name="lab" alt="Lab" coords="113,363.8000030517578,200,363.8000030517578,199,495.8000030517578,127,495.8000030517578,128,449.8000030517578,113,450.8000030517578" href="#">
+                <area shape="poly" name="kitchen" alt="Kitchen" coords="96,314.6666679382324,96,363.6666679382324,110,363.6666679382324,110,449.6666679382324,73,451.6666679382324,74,495.6666679382324,4,495.6666679382324,4,315.6666679382324" href="#">
+            </map>
+          </div>
+          <ul class="nav nav-sidebar">
+            <li data-room-name="maxwell"><a>Maxwell</a></li>
+            <li data-room-name="hertz"><a>Hertz</a></li>
+            <li data-room-name="faraday"><a>Faraday</a></li>
+            <li data-room-name="gauss"><a>Gauss</a></li>
+            <li data-room-name="watt"><a>Watt</a></li>
+            <li data-room-name="balcrear"><a>Balcony Rear</a></li>
+            <li data-room-name="ampere"><a>Ampere</a></li>
+            <li data-room-name="volta"><a>Volta</a></li>
+            <li data-room-name="reception"><a>Reception</a></li>
+            <li data-room-name="lab"><a>Lab</a></li>
+            <li data-room-name="kitchen"><a>Kitchen</a></li>
+            <li data-room-name="balcfront"><a>Balcony Front</a></li>
+            <li data-room-name="openofficearea" class="active"><a>Open Office Area</a></li>
+            <li data-room-name="closet"><a>Closet</a></li>
+          </ul>
+        </div> <!-- sidebar -->
+
+        <!-- main section -->
+        <div class="col-sm-9 col-sm-offset-3 col-md-10 col-md-offset-2 main">
+
+          <!-- dashboard -->
+          <div class="dashboard tab">
+            <h1 class="page-header">Dashboard</h1>
+
+            <div class="row widgets">
+              <div class="row-last"></div>
+            </div>
+
+            <h2 class="sub-header">Office Overview Temperature Graph</h2>
+            <div class="table-responsive">
+              <div class="overview-graph" id="office-overview-graph" style="width: 100%; height: 500px; margin-bottom: 10%;"></div>
+            </div>
+            <div class="message-box dashboard hidden">
+              <h3></h3>
+            </div>
+
+          </div> <!-- dashboard-tab -->
+
+          <!-- channels -->
+          <div class="channels tab hidden">
+            <h1 class="page-header">Channels</h1>
+            <div class="row">
+              <div class="col-sm-6">
+                <div data-node="activeStreams" class="activeStreams bkgnd">
+                  <h2>Active Streams</h2>
+                  <p class="heading-border"></p>
+                </div>
+              </div>
+              <div class="col-sm-6">
+                <div data-node="inactiveStreams" class="inactiveStreams bkgnd">
+                  <h2>Inactive Streams</h2>
+                  <p class="heading-border"></p>
+                </div>
+              </div>
+            </div>
+            <div class="row">
+              <div class="col-sm-6">
+                <div data-node="activeEvents" class="activeEvents bkgnd">
+                  <h2>Active Events</h2>
+                  <p class="heading-border"></p>
+                </div>
+              </div>
+              <div class="col-sm-6">
+                <div data-node="inactiveEvents" class="inactiveEvents bkgnd">
+                  <h2>Inactive Events</h2>
+                  <p class="heading-border"></p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- settings -->
+          <div class="settings tab hidden">
+            <h1 class="page-header">Settings</h1>
+
+            <div class="forms">
+              <div class="col-xs-6 col-sm-5">
+                <form onsubmit="return false" id="add-device" class="form">
+                  <fieldset>
+                  <h3>Add Device</h3>
+                  <div class="form-inputs">
+                    <label for="add-agent-id">AGENT ID:</label>
+                    <select id="add-agent-id" class="dropdown agent-id" name="id">
+                      <option selected="selected" disabled="disabled">Select a Device</option>
+                    </select>
+                    <!-- <input id="add-agent-id" type="text" placeholder=" Agent ID"> -->
+                    <label for="add-room-name">AREA:</label>
+                    <select id="add-room-name" class="dropdown" name="room">
+                      <option selected="selected" disabled="disabled">Select a Room</option>
+                      <option value="maxwell">Maxwell</option>
+                      <option value="hertz">Hertz</option>
+                      <option value="faraday">Faraday</option>
+                      <option value="gauss">Gauss</option>
+                      <option value="watt">Watt</option>
+                      <option value="balcrear">Balcony Rear</option>
+                      <option value="ampere">Ampere</option>
+                      <option value="volta">Volta</option>
+                      <option value="reception">Reception</option>
+                      <option value="lab">Lab</option>
+                      <option value="kitchen">Kitchen</option>
+                      <option value="balcfront">Balcony Front</option>
+                      <option value="openofficearea">Open Office Area</option>
+                      <option value="closet">Closet</option>
+                    </select>
+                    <label for="add-device-name">DEVICE NAME:</label>
+                    <input id="add-device-name" type="text" placeholder=" Device Name">
+
+                    <button id="addDevice" class="btn- btn-primary" type="submit">Add</button>
+                  </div>
+                  </fieldset>
+                </form>
+
+                <form onsubmit="return false" id="delete-device" class="form">
+                  <fieldset>
+                  <h3>Delete Device</h3>
+                  <div class="form-inputs">
+
+                    <label for="delete-agent-id">AGENT ID:</label>
+                    <select id="delete-agent-id" class="dropdown agent-id active-dev" name="id">
+                      <option selected="selected" disabled="disabled">Select a Device</option>
+                    </select>
+
+                    <button id="deleteDevice" class="btn- btn-primary" type="submit">Delete</button>
+                  </div>
+                  </fieldset>
+                </form>
+              </div>
+
+              <div class="col-xs-12 col-sm-7">
+                <form onsubmit="return false" id="configure-device" class="form">
+                  <fieldset>
+                  <h3>Configure Device</h3>
+                  <div class="form-inputs">
+                    <label for="configure-agent-id">AGENT ID:</label>
+                    <select id="configure-agent-id" class="dropdown agent-id active-dev" name="id">
+                      <option selected="selected" disabled="disabled">Select a Device</option>
+                    </select>
+                    <div class="dev-config hidden">
+                      <label for="configure-room-name">AREA:</label>
+                      <select id="configure-room-name" class="dropdown" name="area">
+                        <option selected="selected" disabled="disabled">Select a Room</option>
+                        <option value="maxwell">Maxwell</option>
+                        <option value="hertz">Hertz</option>
+                        <option value="faraday">Faraday</option>
+                        <option value="gauss">Gauss</option>
+                        <option value="watt">Watt</option>
+                        <option value="balcrear">Balcony Rear</option>
+                        <option value="ampere">Ampere</option>
+                        <option value="volta">Volta</option>
+                        <option value="reception">Reception</option>
+                        <option value="lab">Lab</option>
+                        <option value="kitchen">Kitchen</option>
+                        <option value="balcfront">Balcony Front</option>
+                        <option value="openofficearea">Open Office Area</option>
+                        <option value="closet">Closet</option>
+                      </select>
+                      <div class="dev-info">
+                        <label for="configure-device-name">DEVICE NAME:</label>
+                        <input id="configure-device-name" type="text" placeholder=" Device Name">
+                        <label>SUBSCRIPTION NAMES:</label>
+                        <div class="sub-cat subscriptions">
+                        </div>
+                        <label>WIDGETS:</label>
+                        <div class="sub-cat">
+                            <label class="sub-label" for="configure-widgets-light">Light</label>
+                            <select id="configure-widgets-light" class="dropdown small-input sel-sub" name="light-widget">
+                              <option selected="selected" disabled="disabled">Select a Subscription</option>
+                              <option value="streamName">StreamName</option>
+                            </select>
+                            <label class="sub-label" for="configure-widgets-temp">Temperature</label>
+                            <select id="configure-widgets-temp" class="dropdown small-input sel-sub" name="temp-widget">
+                              <option selected="selected" disabled="disabled">Select a Subscription</option>
+                              <option value="streamName">StreamName</option>
+                            </select>
+                            <label class="sub-label" for="configure-widgets-humid">Humidity</label>
+                            <select id="configure-widgets-humid" class="dropdown small-input sel-sub" name="humid-widget">
+                              <option selected="selected" disabled="disabled">Select a Subscription</option>
+                              <option value="streamName">StreamName</option>
+                            </select>
+                          </div>
+                        </div>
+
+                      <button id="configureDevice" class="btn- btn-primary" type="submit">Configure</button>
+                    </div>
+                  </div>
+                  </fieldset>
+                </form>
+              </div>
+
+            </div> <!-- forms -->
+          </div> <!-- settings -->
+
+        </div> <!-- main -->
+      </div> <!-- row -->
+    </div> <!-- container -->
+
+
+    <!-- jQuery -->
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.1/jquery.min.js"></script>
+    <!-- Bootstrap -->
+    <script src="vendor/js/bootstrap.min.js"></script>
+    <!-- IE10 viewport hack for Surface/desktop Windows 8 bug -->
+    <script src="vendor/js/ie10-viewport-bug-workaround.js"></script>
+    <!-- Firebase -->
+    <script src="https://cdn.firebase.com/js/client/2.2.3/firebase.js"></script>
+    <!-- Image Mapster -->
+    <script type="text/javascript" src="vendor/js/jquery.imagemapster.min.js"></script>
+    <!-- Flot -->
+    <script language="javascript" type="text/javascript" src="vendor/js/jquery.flot.min.js"></script>
+    <script language="javascript" type="text/javascript" src="vendor/js/jquery.flot.time.min.js"></script>
+    <script language="javascript" type="text/javascript" src="vendor/js/jquery.flot.resize.min.js"></script>
+    <script language="javascript" type="text/javascript" src="vendor/js/jquery.flot.selection.min.js"></script>
+    <!-- JavaScript File -->
+    <script type="text/javascript" src="js/office_sensors.js"></script>
+
+  </body>
+</html>

@@ -1,0 +1,467 @@
+/*
+ * Base structure
+ */
+
+/* Move down content because we have a fixed navbar that is 50px tall */
+body {
+  padding-top: 50px;
+  background-color: #303030;
+}
+
+/*.forms {
+  width: 100%;
+  height: 900px;
+  background-color: red;
+}*/
+
+.form {
+  text-align: center;
+  margin: 10px 5px;
+  padding: 10px;
+  background-color: #383838;
+  border-radius: 4px;
+  box-shadow: 0 2px 5px rgba(35, 35, 35, .7);
+}
+
+fieldset {
+  background-color: #262626;
+  border-radius: 15px;
+}
+
+h1, h2, h3, h4, h5, h6, p {
+  color:#D9E0D5;
+  /*color: #B7BFB2;*/
+}
+
+a {
+  color: #B7BFB2;
+}
+
+a:hover, a:focus {
+  color: #206118;
+}
+
+.nav>li>a:hover, .nav>li>a:focus {
+  background-color: #C5C9C3;
+}
+
+/*
+ * Global add-ons
+ */
+
+.sub-header {
+  padding-bottom: 10px;
+  border-bottom: 1px solid #eee;
+}
+
+/*
+ * Top navigation
+ * Hide default border to remove 1px line.
+ */
+.navbar-fixed-top {
+  border: 0;
+}
+
+.navbar-inverse .navbar-brand {
+  color: #DBDBDB;
+}
+
+.navbar-inverse .navbar-brand:hover, .navbar-inverse .navbar-brand:active {
+  color: #DBDBDB;
+}
+
+/*
+ * Sidebar
+ */
+
+/* Hide for mobile, show later */
+.sidebar {
+  display: none;
+}
+@media (min-width: 768px) {
+  .sidebar {
+    position: fixed;
+    top: 50px;
+    bottom: 0;
+    left: 0;
+    z-index: 1000;
+    display: block;
+    padding: 20px;
+    overflow-x: hidden;
+    overflow-y: auto; /* Scrollable contents if viewport is shorter than content. */
+    border-right: 1px solid #000;
+  }
+}
+
+/* Sidebar navigation */
+.nav-sidebar {
+  margin-right: -21px; /* 20px padding + 1px border */
+  margin-bottom: 20px;
+  margin-left: -20px;
+}
+.nav-sidebar > li > a {
+  padding-right: 20px;
+  padding-left: 20px;
+}
+.nav-sidebar > .active > a,
+.nav-sidebar > .active > a:hover,
+.nav-sidebar > .active > a:focus {
+  color: #C9C9C9;
+  background-color: #206118;
+}
+
+/*
+ * Main content
+ */
+
+.main {
+  padding: 20px;
+}
+@media (min-width: 768px) {
+  .main {
+    padding-right: 40px;
+    padding-left: 40px;
+  }
+}
+.main .page-header {
+  margin-top: 0;
+}
+
+.widgets {
+  margin-bottom: 30px;
+}
+
+.widgets h2 {
+  margin: 1%;
+  font-size: 4.5em;
+  color: #E1E8DF;
+  text-align: center;
+}
+
+.room-widgets {
+  display: inline-block;
+  float: left;
+  width: 100%;
+  height: 190px;
+  background-color: #383838;
+  border-radius: 4px;
+  box-shadow: 0 2px 5px rgba(35, 35, 35, .7);
+}
+
+.room-widgets h3 {
+  font-size: 18px;
+  text-align: center;
+  margin: 10px 0 5px 0;
+}
+
+.room-widgets .widget {
+  background-color: #262626;
+  text-align: center;
+  margin: 0;
+  padding: 0;
+}
+
+.room-widgets .widget .dash-heading1 {
+  padding: 2% 0;
+  font-size: 16px;
+}
+
+.room-widgets .widget .time {
+  font-size: .7em;
+}
+
+.room-widgets .widget h2 {
+  font-size: 3.8em;
+}
+
+.room-widgets .heading-border {
+   border-bottom: 1px solid #383838;
+   margin-bottom: 5px;
+}
+
+.widget {
+  background-color: #383838;
+  margin: 1.5%;
+  padding: 0.5% 0;
+  border-radius: 4px;
+  box-shadow: 0 2px 5px rgba(35, 35, 35, .7);
+}
+
+.widget .temp-box {
+  height: 80px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.widget canvas {
+  width: 150px;
+  height: 75px;
+}
+
+.hidden {
+  display: none;
+}
+
+.time {
+  font-size: 0.9em;
+  text-align: center;
+  margin: 0;
+  padding-bottom: 1px;
+}
+
+.dash-heading2 {
+  font-size: 0.8em;
+  color: #B7BFB2;
+  padding-left: 5%;
+  margin-top: 0;
+}
+
+.dash-heading1 {
+  font-size: 1.4em;
+  color: #9CA199;
+  padding-left: 5%;
+  margin-bottom: 0;
+}
+
+.heading-border {
+  border-bottom: 1px solid #232323;
+}
+
+.title-border {
+  border-bottom: 1px solid #262626;
+  margin: 0 0 10px;
+}
+
+.message-box {
+  text-align: center;
+  margin-top: 5%;
+}
+
+.message-box h3 {
+  font-size: 3em;
+}
+
+.message-box h4 {
+  font-size: 1.5em;
+}
+
+/*
+ * Form
+ */
+
+.forms {
+  width: 95%;
+  margin: 0 auto;
+}
+
+form h3 {
+  border-bottom: 1px solid #383838;
+  margin: 0;
+  padding: 5% 0;
+}
+
+.settings button, .settings input, .settings optgroup, .settings select, .settings textarea {
+  margin: 0 0 20px 0;
+  width: 100%;
+  color: #B7BFB2;
+}
+
+.form-inputs {
+  margin: 5% auto;
+  width: 70%;
+  text-align: left;
+}
+
+.form-inputs label {
+  font-size: 1.2em;
+  color: #B7BFB2;
+  display: block;
+  margin: 0;
+}
+
+.form-inputs input {
+  border-radius: 6px;
+  background-color: #383838;
+  border-color: #383838;
+}
+
+.form-inputs select {
+  border-radius: 6px;
+  background-color: #383838;
+  border-color: #383838;
+}
+
+.form-inputs button {
+  color: #B7BFB2;
+  background-color: #206118;
+  border-color: #206118;
+  border-radius: 6px;
+  padding: 1%;
+  font-size: 1.1em;
+}
+
+.form-inputs button:hover, .form-inputs button:active, button#addTempBug.btn-.btn-primary {
+  color: #B7BFB2;
+  background-color: #25731C;
+  border-color: #206118;
+}
+
+.sub-cat {
+  width: 90%;
+  margin: auto;
+}
+
+.form-inputs .sub-label {
+  font-size: 11px;
+}
+
+.settings .form-inputs button {
+    margin-top: 10px;
+}
+
+.legendLabel {
+  color: #CCCCCC;
+  padding-left: 5%;
+}
+
+.legendColorBox {
+  padding-left: 1%;
+}
+
+.message-box.settings {
+  clear: both;
+}
+
+.tooltip {
+  position: absolute;
+  display: none;
+  color: #E1E8DF;
+  border: 1px solid #6B6B6B;
+  padding: 2px;
+  background-color: #7A7A7A;
+  opacity: 0.80;
+  text-align: center;
+}
+
+.tooltip span {
+  font-size: 1.1em;
+}
+
+.tooltip p {
+  margin: 0;
+  color: #CDD6CB;
+}
+
+.right {
+  float: right;
+}
+
+.flot-tick-label {
+  color: #CDD6CB;
+}
+
+.temp-humid-graph {
+  border-radius: 4px;
+  box-shadow: 0 2px 5px rgba(35, 35, 35, .7);
+  background-color: #383838;
+}
+
+.temp-humid-graph h4 {
+  padding-top: 10px;
+  font-size: 18px;
+  text-align: center;
+  margin: 0 0 5px 0;
+}
+
+.temp-humid-graph .sm-graph {
+  width: 100%;
+  height: 155px;
+  margin-bottom: 30px;
+}
+
+.temp-humid-graph .title-border {
+  margin: 0;
+}
+
+.temp-graph {
+  border-radius: 4px;
+  box-shadow: 0 2px 5px rgba(35, 35, 35, .7);
+  background-color: #383838;
+}
+
+.temp-graph .med-graph {
+  width: 100%;
+  height: 180px;
+  margin-bottom: 30px;
+}
+
+.temp-graph h4 {
+  padding-top: 10px;
+  font-size: 18px;
+  text-align: center;
+  margin: 0 0 5px 0;
+}
+
+.temp-graph .title-border {
+  margin: 0;
+}
+
+.channels .sub-btn {
+  border-radius: 4px;
+  border: 1px solid #206118;
+  box-shadow: 2px 2px 2px rgba(35, 35, 35, .7);
+  background-color: #383838;
+  display: inline-block;
+  margin: 10px 15px 20px;
+  padding: 5px;
+}
+
+.channels h2 {
+  font-size: 18px;
+  margin: 0;
+  padding: 20px 15px 10px;
+}
+
+.channels h3 {
+  margin: 0px;
+  font-size: 12px;
+}
+
+.channels p {
+  font-size: 11px;
+  margin-bottom: 0;
+  color: #B7BFB2;
+}
+
+.channels .title-border {
+  margin: 5px -5px;
+  border-bottom: 1px solid #206118;
+}
+
+.channels .heading-border {
+  border-bottom: 1px solid #303030;
+}
+
+.channels .bkgnd {
+  background-color: #262626;
+  border-radius: 4px;
+  box-shadow: 2px 2px 2px rgba(35, 35, 35, .7);
+  margin: 5px 0;
+}
+
+.activeStreams, .activeEvents {
+  width: 100%;
+  float: left;
+  min-height: 146px;
+}
+
+.inactiveStreams, .inactiveEvents {
+  width: 100%;
+  float: right;
+  min-height: 146px;
+}
+
+.navbar-inverse .navbar-nav>.active>a, .navbar-inverse .navbar-nav>.active>a:hover, .navbar-inverse .navbar-nav>.active>a:focus {
+  background-color: transparent;
+}

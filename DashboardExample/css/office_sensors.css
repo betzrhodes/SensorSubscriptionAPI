@@ -357,6 +357,10 @@ form h3 {
   float: right;
 }
 
+.left {
+  float: left;
+}
+
 .flot-tick-label {
   color: #CDD6CB;
 }

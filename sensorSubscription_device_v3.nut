@@ -1,420 +1,6 @@
-//helper printing function
-function logTable(t, i = 0) {
-    local indentString = "";
-    for(local x = 0; x < i; x++) indentString += " ";
-
-    foreach(k, v in t) {
-        if (typeof(v) == "table" || typeof(v) == "array") {
-            local par = "[]";
-            if (typeof(v) == "table") par = "{}";
-
-            server.log(indentString + k + ": " + par[0].tochar());
-            logTable(v, i+4);
-            server.log(par[1].tochar());
-        }
-        else {
-            server.log(indentString + k + ": " + v);
-        }
-    }
-}
-
+#require "Bullwinkle.class.nut:1.0.0"
 
 /******************** Bullwinkle Setup ********************/
-class Bullwinkle {
-    _handlers = null;
-    _sessions = null;
-    _partner  = null;
-    _history  = null;
-    _timeout  = 10;
-    _retries  = 1;
-
-
-    // .........................................................................
-    constructor() {
-        const BULLWINKLE = "bullwinkle";
-
-        _handlers = { timeout = null, receive = null };
-        _partner  = is_agent() ? device : agent;
-        _sessions = { };
-        _history  = { };
-
-        // Incoming message handler
-        _partner.on(BULLWINKLE, _receive.bindenv(this));
-    }
-
-
-    // .........................................................................
-    function send(command, params = null) {
-
-        // Generate an unique id
-        local id = _generate_id();
-
-        // Create and store the session
-        _sessions[id] <- Bullwinkle_Session(this, id, _timeout, _retries);
-
-        return _sessions[id].send("send", command, params);
-    }
-
-
-    // .........................................................................
-    function ping() {
-
-        // Generate an unique id
-        local id = _generate_id();
-
-        // Create and store the session
-        _sessions[id] <- Bullwinkle_Session(this, id, _timeout, _retries);
-
-        // Send it
-        return _sessions[id].send("ping");
-    }
-
-
-    // .........................................................................
-    function is_agent() {
-        return (imp.environment() == ENVIRONMENT_AGENT);
-    }
-
-    // .........................................................................
-    static function _getCmdKey(cmd) {
-        return BULLWINKLE + "_" + cmd;
-    }
-
-    // .........................................................................
-    function on(command, callback) {
-        local cmdKey = Bullwinkle._getCmdKey(command);
-
-        if (cmdKey in _handlers) {
-            _handlers[cmdKey] = callback;
-        } else {
-            _handlers[cmdKey] <- callback
-        }
-    }
-    // .........................................................................
-    function onreceive(callback) {
-        _handlers.receive <- callback;
-    }
-
-
-    // .........................................................................
-    function ontimeout(callback, timeout = null) {
-        _handlers.timeout <- callback;
-        if (timeout != null) _timeout = timeout;
-    }
-
-
-    // .........................................................................
-    function set_timeout(timeout) {
-        _timeout = timeout;
-    }
-
-
-    // .........................................................................
-    function set_retries(retries) {
-        _retries = retries;
-    }
-
-
-    // .........................................................................
-    function _generate_id() {
-        // Generate an unique id
-        local id = null;
-        do {
-            id = math.rand();
-        } while (id in _sessions);
-        return id;
-    }
-
-    // .........................................................................
-    function _is_unique(context) {
-
-        // Clean out old id's from the history
-        local now = time();
-        foreach (id,t in _history) {
-            if (now - t > 100) {
-                delete _history[id];
-            }
-        }
-
-        // Check the current context for uniqueness
-        local id = context.id;
-        if (id in _history) {
-            return false;
-        } else {
-            _history[id] <- time();
-            return true;
-        }
-    }
-
-    // .........................................................................
-    function _clone_context(ocontext) {
-        local context = {};
-        foreach (k,v in ocontext) {
-            switch (k) {
-                case "type":
-                case "id":
-                case "time":
-                case "command":
-                case "params":
-                    context[k] <- v;
-            }
-        }
-        return context;
-    }
-
-
-    // .........................................................................
-    function _end_session(id) {
-        if (id in _sessions) {
-            delete _sessions[id];
-        }
-    }
-
-
-    // .........................................................................
-    function _receive(context) {
-        local id = context.id;
-        switch (context.type) {
-            case "send":
-            case "ping":
-                // build the command string
-                local cmdKey = Bullwinkle._getCmdKey(context.command);
-
-                // Immediately ack the message
-                local response = { type = "ack", id = id, time = Bullwinkle_Session._timestamp() };
-                if (!_handlers.receive && !_handlers[cmdKey]) {
-                    response.type = "nack";
-                }
-                _partner.send(BULLWINKLE, response);
-
-                // Then handed on to the callback
-                if (context.type == "send" && (_handlers.receive || _handlers[cmdKey]) && _is_unique(context)) {
-                    try {
-                        // Prepare a reply function for shipping a reply back to the sender
-                        context.reply <- function (reply) {
-                            local response = { type = "reply", id = id, time = Bullwinkle_Session._timestamp() };
-                            response.reply <- reply;
-                            _partner.send(BULLWINKLE, response);
-                        }.bindenv(this);
-
-                        // Fire the callback
-                        if (_handlers[cmdKey]) {
-                            _handlers[cmdKey](context);
-                        } else {
-                            _handlers.receive(context);
-                        }
-                    } catch (e) {
-                        // An unhandled exception should be sent back to the sender
-                        local response = { type = "exception", id = id, time = Bullwinkle_Session._timestamp() };
-                        response.exception <- e;
-                        _partner.send(BULLWINKLE, response);
-                    }
-                }
-                break;
-
-            case "nack":
-            case "ack":
-                // Pass this packet to the session handler
-                if (id in _sessions) {
-                    _sessions[id]._ack(context);
-                }
-                break;
-
-            case "reply":
-                // This is a reply for an sent message
-                if (id in _sessions) {
-                    _sessions[id]._reply(context);
-                }
-                break;
-
-            case "exception":
-                // Pass this packet to the session handler
-                if (id in _sessions) {
-                    _sessions[id]._exception(context);
-                }
-                break;
-
-            default:
-                throw "Unknown context type: " + context.type;
-
-        }
-    }
-
-}
-class Bullwinkle_Session {
-    _handlers = null;
-    _parent = null;
-    _context = null;
-    _timer = null;
-    _timeout = null;
-    _acked = false;
-    _retries = null;
-
-    // .........................................................................
-    constructor(parent, id, timeout = 0, retries = 1) {
-        _handlers = { ack = null, reply = null, timeout = null, exception = null };
-        _parent = parent;
-        _timeout = timeout;
-        _retries = retries;
-        _context = { time = _timestamp(), id = id };
-    }
-
-    // .........................................................................
-    function onack(callback) {
-        _handlers.ack = callback;
-        return this;
-    }
-
-    // .........................................................................
-    function onreply(callback) {
-        _handlers.reply = callback;
-        return this;
-    }
-
-    // .........................................................................
-    function ontimeout(callback) {
-        _handlers.timeout = callback;
-        return this;
-    }
-
-    // .........................................................................
-    function onexception(callback) {
-        _handlers.exception = callback;
-        return this;
-    }
-
-    // .........................................................................
-    function send(type = "resend", command = null, params = null) {
-
-        _retries--;
-
-        if (type != "resend") {
-            _context.type <- type;
-            _context.command <- command;
-            _context.params <- params;
-        }
-
-        if (_timeout > 0) _set_timer(_timeout);
-        _parent._partner.send(BULLWINKLE, _context);
-
-        return this;
-    }
-
-    // .........................................................................
-    function _set_timer(timeout) {
-
-        // Stop any current timers
-        _stop_timer();
-
-        // Start a fresh timer
-        _timer = imp.wakeup(_timeout, _ontimeout.bindenv(this));
-    }
-
-    // .........................................................................
-    function _ontimeout() {
-
-        // Close down the timer and session
-        _timer = null;
-
-        if (!_acked && _retries > 0) {
-            // Retry is required
-            send();
-        } else {
-            // Close off this dead session
-            _parent._end_session(_context.id)
-
-            // If we are still waiting for an ack, throw a callback
-            if (!_acked) {
-                _context.latency <- _timestamp_diff(_context.time, _timestamp());
-                if (_handlers.timeout) {
-                    // Send the context to the session timeout handler
-                    _handlers.timeout(_context);
-                } else if (_parent._handlers.timeout) {
-                    // Send the context to the global timeout handler
-                    _parent._handlers.timeout(_context);
-                }
-            }
-        }
-    }
-
-    // .........................................................................
-    function _stop_timer() {
-        if (_timer) imp.cancelwakeup(_timer);
-        _timer = null;
-    }
-
-    // .........................................................................
-    function _timestamp() {
-        if (Bullwinkle.is_agent()) {
-            local d = date();
-            return format("%d.%06d", d.time, d.usec);
-        } else {
-            local d = math.abs(hardware.micros());
-            return format("%d.%06d", d/1000000, d%1000000);
-        }
-    }
-
-
-    // .........................................................................
-    function _timestamp_diff(ts0, ts1) {
-        // server.log(ts0 + " > " + ts1)
-        local t0 = split(ts0, ".");
-        local t1 = split(ts1, ".");
-        local diff = (t1[0].tointeger() - t0[0].tointeger()) + (t1[1].tointeger() - t0[1].tointeger()) / 1000000.0;
-        return math.fabs(diff);
-    }
-
-
-    // .........................................................................
-    function _ack(context) {
-        // Restart the timeout timer
-        _set_timer(_timeout);
-
-        // Calculate the round trip latency and mark the session as acked
-        _context.latency <- _timestamp_diff(_context.time, _timestamp());
-        _acked = true;
-
-        // Fire a callback
-        if (_handlers.ack) {
-            _handlers.ack(_context);
-        }
-
-    }
-
-
-    // .........................................................................
-    function _reply(context) {
-        // We can stop the timeout timer now
-        _stop_timer();
-
-        // Fire a callback
-        if (_handlers.reply) {
-            _context.reply <- context.reply;
-            _handlers.reply(_context);
-        }
-
-        // Remove the history of this message
-        _parent._end_session(_context.id)
-    }
-
-
-    // .........................................................................
-    function _exception(context) {
-        // We can stop the timeout timer now
-        _stop_timer();
-
-        // Fire a callback
-        if (_handlers.exception) {
-            _context.exception <- context.exception;
-            _handlers.exception(_context);
-        }
-
-        // Remove the history of this message
-        _parent._end_session(_context.id)
-    }
-
-}
-
 //initialize Bullwinkle
 bullwinkle <- Bullwinkle();
 
@@ -1195,8 +781,7 @@ const TMP1x2_ADDR = 0x92;
 const Si702x_ADDR = 0x80;
 const Si1145_ADDR = 0xC0;
 
-
-//helper initialize functions
+// helper initialize functions
 function initializeTemp() {
     if (!noraTemp) { noraTemp <- TMP1x2(i2c, TMP1x2_ADDR, hardware.pinE); }
 }
@@ -1209,6 +794,7 @@ function initializeAmbLight() {
     if (!noraAmbLight) { noraAmbLight <- SI1145(i2c, hardware.pinD, Si1145_ADDR); }
 }
 
+// helper reading functions
 function temp_tempReading(context, stream, callback) {
     local reading = noraTemp.readTempC(); //replace with non blocking read
     callback.call(context, stream, { "temp": reading, "ts": time() })
@@ -1231,12 +817,15 @@ function ambLight_lightReading(context, stream, callback) {
     });
 }
 
+// helper event setup funcitons
+
 //uses parameters passed from agent to configure sensor
 function setUpTempThermostat(params) {
     initializeTemp();
     if("low" in params) {noraTemp.setLowThreshold(params.low)};
     if("high" in params) {noraTemp.setHighThreshold(params.high)};
 }
+
 
 //table of sensor setup functions
 //keys are the stream name/command - need to be the same as the agent side - "addSensorToSettings"
@@ -1251,7 +840,7 @@ sensorSubscriptionFunctionsByCommand <- {
 
 
 //this should clear all events - need this if we want the ability to unsubscribe from an event
-//currently this is not working!
+//currently this is not working! & it is not possible to unsubscribe from an event.
 function resetEvents() {
     // if(noraTemp) { noraTemp.reset(); }
 }
@@ -1554,7 +1143,6 @@ class deviceSideSensorAPI {
 }
 
 
-
 //initialize our sensor communications layer
 //params - name we want to use to store our data and settings under, our table of sensor setup functions,
 //          our bullwinkle instance, our event reset function(optional - don't need if we don't have events)
@@ -1566,59 +1154,3 @@ api <- deviceSideSensorAPI(sensorSubscriptionFunctionsByCommand, bullwinkle, res
 //          function to exicute when event triggers - should return message or data to send to the agent/user
 api.setUpEvent("noraTemp_thermostat", "pinE", 0, function(){ initializeTemp(); return noraTemp.readTempC(); });
 
-
-
-
-
-
-
-
-//data structure examples
-
-/*nv:   { envSensorTailData: {  "nextWakeUp": 1422306809,
-                                "nextConnection": 1422306864,
-                                "sensorReadings": { "sensorTail_tempReadings" : [ readings... ],
-                                                    "sensorTail_themostat" : [ readings... ] },
-                              },
-          envSensorTailSettings: {  readingInterval: 5,
-                                    reportingInterval: 60,
-                                    subscriptions: {
-                                        "activeStreams" : [ "sensorTail_tempReadings",
-                                                            "sensorTail_humidReadings" ],
-                                        "activeEvents" : { "sensorTail_themostat" : {low: 20, high: 30} }
-                                    }
-                                 },
-          eventConfig: { "noraTemp_thermostat" : {"pin" : "pinE", "eventTriggerPolarity" : 0, "callback" : function(){ initializeTemp(); return noraTemp.readTempC();} },
-                         "nora_baro" : {"pin" : "pinA", "eventTriggerPolarity" : 1, "callback" : function(){server.log("barometer event")} },
-                         "nora_accel" : {"pin" : "pinB", "eventTriggerPolarity" : 1, "callback" : function(){server.log("accel event")} },
-                         "nora_mag" : {"pin" : "pinC", "eventTriggerPolarity" : 0, "callback" : function(){server.log("mag event")} },
-                         "nora_als" : {"pin" : "pinD", "eventTriggerPolarity" : 0, "callback" : function(){server.log("als event")} } }
-          eventPins: {"pinE":null, "pinA": null},
-          eventConfig: { "noraTemp_thermostat" : {"pin" : "pinE", "eventTriggerPolarity" : 0, "callback" : function(){ initializeTemp(); return noraTemp.readTempC();} },
-                     "nora_baro" : {"pin" : "pinA", "eventTriggerPolarity" : 1, "callback" : function(){server.log("barometer event")} },
-                     "nora_accel" : {"pin" : "pinB", "eventTriggerPolarity" : 1, "callback" : function(){server.log("accel event")} },
-                     "nora_mag" : {"pin" : "pinC", "eventTriggerPolarity" : 0, "callback" : function(){server.log("mag event")} },
-                     "nora_als" : {"pin" : "pinD", "eventTriggerPolarity" : 0, "callback" : function(){server.log("als event")} },
-                    }
-        }
-*/
-
-/*sensorSettings <- { "agentID" : agentID,
-                    "reportingInterval" : reportingInterval,
-                    "minReadingInterval" : minReadingInterval
-                    "channels" : [{ "channelID" : 0,
-                                   "type" : "temperature",  //type of sensor
-                                   "active" : false,        //whether sensor is transmitting data/listening for event
-                                   "availableStreams" : ["sensorTail_tempReadings", "sensorTail_humidReadings"],
-                                   "availableEvents" : {},
-                                   "activeStreams" : [],
-                                   "activeEvents" : {} },
-                                 { "channelID" : 1,
-                                  "type" : "humidity",
-                                  "active" : false,
-                                  "availableStreams" : ["sensorTail_humidReadings"],
-                                  "availableEvents" : {},
-                                  "activeStreams" : [],
-                                  "activeEvents" : {} }]
-                  };
-*/

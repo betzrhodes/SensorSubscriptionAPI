@@ -3,11 +3,21 @@ $(document).ready(function() {
     var roomNames = {maxwell: "Maxwell", hertz: "Hertz", faraday: "Faraday", gauss: "Gauss", watt: "Watt", balcrear: "Balcony Rear", ampere: "Ampere", volta: "Volta", reception: "Reception", lab: "Lab", kitchen: "Kitchen", balcfront: "Balcony Front", openofficearea: "Open Office Area", closet: "Closet"};
     var navTabs = ["dashboard", "channels", "settings"];
     var currentLocation = "Los_Altos";
+    var weatherLoop;
 
     var tempGraphDataSets = [];
     var temp_graphData = [];
+
+    var tempHumid_graphData = [];
+
     var overviewGraphDataSets = [];
     var overview_graphData = [];
+
+    var tempHumidStartTime = Date.now() - 3600000; // (-1h)
+    tempHumidStartTime = Math.floor(tempHumidStartTime / 1000);
+
+    var tempStartTime = Date.now() - 21600000;  // (-6h)
+    tempStartTime = Math.floor(tempStartTime / 1000);
 
     // Graph Options
     var tempGraphOptions = {
@@ -43,7 +53,7 @@ $(document).ready(function() {
             margin: { right: 10, },
         },
         legend: {
-          show: false,
+          show: true,
           position: "nw",
           backgroundColor: "#7A7A7A",
           backgroundOpacity: 0.2,
@@ -57,7 +67,7 @@ $(document).ready(function() {
             color: "#CCCCCC",
             mode: "time",
             tickLength: 1,
-            ticks: 3,
+            ticks: 2,
             timeformat: "%a %I:%M %P",
             timezone: "browser",
         },
@@ -213,7 +223,7 @@ $(document).ready(function() {
         updateDashboardRoomName(roomNames[room]);
         clearDashboard();
         getAllActiveSubscriptions(room, getDeviceInfo);
-        loadWeatherAPIData(room);
+        loadWeatherAPIData();
     }
 
     function loadChannels() {
@@ -227,13 +237,16 @@ $(document).ready(function() {
         getActiveDevices(buildAgentIDDropdowns);
     }
 
-    function loadWeatherAPIData(location) {
+    function loadWeatherAPIData() {
         createLocalTempWidget();
-        getLocalWeather(); //set up timer to get data every 1h?? - push this data onto graphs!!
-        // getWeatherGraphData(location, graphWeatherData);
-        getHistoricalWeatherData("yesterday", location);
+        startLocalWeatherLoop();
+        getHistoricalWeatherData("yesterday");
     }
 
+    function startLocalWeatherLoop() {
+        getLocalWeather();
+        weatherLoop = setInterval(getLocalWeather, 900000); //updates graph data & local widget
+    }
 
     /////////////// Firebase Functions ///////////////////
 
@@ -503,6 +516,7 @@ $(document).ready(function() {
 
     function clearDashboard() {
         $(".widgets").html('<div class="device-rows"></div><div class="row-last"></div>');
+        clearInterval(weatherLoop);
     }
 
     function clearChannels() {
@@ -629,22 +643,22 @@ $(document).ready(function() {
     }
 
     function updateLightWidget(reading, time, agentID, stream) {
-        updateTime(stream, time);
+        updateTime(agentID, stream, time);
         createLightDot("light-"+agentID, reading);
     }
 
     function updateHumidWidget(reading, time, agentID, stream) {
-        updateTime(stream, time);
+        updateTime(agentID, stream, time);
         createHumidGauge("humid-"+agentID, Math.round(reading));
     }
 
     function updateTempWidget(reading, time, agentID, stream) {
-        updateTime(stream, time);
+        updateTime(agentID, stream, time);
         $(".temp-box h2").text(Math.round(reading)+"°C");
     }
 
-    function updateTime(stream, time) {
-        $("[data-stream-name='"+stream+"'] .time").text("updated @ "+time);
+    function updateTime(agentID, stream, time) {
+        $("[data-room-id="+agentID+"] [data-stream-name="+stream+"] .time").text("updated @ "+time);
     }
 
     function updateGraph(id, data, options) {
@@ -746,10 +760,11 @@ $(document).ready(function() {
         var lightHTML = "";
         var humidHTML = "";
         var tempHTML = "";
-        var tempHumid_graphData = [];
-        var startTime = Date.now() - 21600000  // (-6h)
+
+        // var startTime = Date.now() - 3600000  // (-1h)
+        // var startTime = Date.now() - 21600000  // (-6h)
         // var ovrStartTime = Date.now() - 86400000 // (-24h)
-        startTime = Math.floor(startTime / 1000);
+        // startTime = Math.floor(startTime / 1000);
 
         for (var subscription in activeSubscriptions) {
             var fbRef = new Firebase("impofficesensors.firebaseio.com/data/"+deviceInfo.location+"/"+deviceInfo.agentID+"/"+subscription+"/");
@@ -781,6 +796,7 @@ $(document).ready(function() {
             }
         }
 
+        // widgets & graph setup
         if (tempHTML != "" || humidHTML != "" || lightHTML!= "") {
             createRow(deviceInfo);
             //if any are blank make a different widget - adjust size of div style differently?
@@ -793,6 +809,11 @@ $(document).ready(function() {
             addGraphToolTip(deviceInfo.agentID, $("#"+deviceInfo.agentID+"-temp-humid-graph"), [ "°C", "%" ]);
         }
 
+        if (!fbTemp && fbHumid) {
+            tempHumid_graphData[0] = { label: "", data: [], yaxis: 1 }
+        }
+
+        // open listeners for widgets
         if (fbLight) {
             fbLight.limitToLast(1).on("child_added", function(cs, prev) {
                 var time = new Date(cs.val().ts * 1000);
@@ -801,52 +822,76 @@ $(document).ready(function() {
         }
 
         if (fbTemp) {
-            //create temp graph & tooltip
+            // temp widget listener
+            fbTemp.limitToLast(1).on("child_added", function(cs, prev) {
+                var time = new Date(cs.val().ts * 1000);
+                updateTempWidget(cs.val().temp, time.toLocaleTimeString(), deviceInfo.agentID, tempSub);
+            })
+
+            // create temp graph & tooltip
             if ( $("#"+deviceInfo.location+"-temp-graph").length == 0 ) {
                 createTempGraph(deviceInfo.location);
                 addGraphToolTip(deviceInfo.location, $("#"+deviceInfo.location+"-temp-graph"), ["°C", "°C", "°C"]);
             }
+        }
 
-            fbTemp.orderByChild("ts").startAt(startTime).on("child_added", function(cs, prev) {
-                var ts = cs.val().ts * 1000;
-                var time = new Date(ts);
-                var temp = cs.val().temp;
-                //widget
-                updateTempWidget(temp, time.toLocaleTimeString(), deviceInfo.agentID, tempSub);
-                //temp-humid graph
-                if( $("#"+deviceInfo.agentID+"-temp-humid-graph").length != 0 ) {
+        if (fbHumid) {
+            fbHumid.limitToLast(1).on("child_added", function(cs, prev) {
+                var time = new Date(cs.val().ts * 1000);
+                updateHumidWidget(cs.val().humid, time.toLocaleTimeString(), deviceInfo.agentID, humidSub);
+            })
+        }
+
+        // temp_humid graph listener
+        setTimeout(function() {
+            // open listeners for graphs with sorted fb data
+            if (fbTemp) {
+                fbTemp.orderByChild("ts").startAt(tempHumidStartTime).on("child_added", function(cs, prev) {
+                    var ts = cs.val().ts * 1000;
+                    var time = new Date(ts);
+                    var temp = cs.val().temp;
+
+                    //temp-humid graph
                     tempHumid_graphData[0].data.push([ ts, temp ]);
                     if (tempHumid_graphData[0].data.length > 60) {
                         tempHumid_graphData[0].data.splice(0, tempHumid_graphData[0].data.length - 60);
                     }
                     updateGraph( "#"+deviceInfo.agentID+"-temp-humid-graph", tempHumid_graphData, tempHumidGraphOptions);
-                }
-                //temp graph
-                temp_graphData[tempIndex].data.push([ ts, temp ]);
-                updateGraph( "#"+deviceInfo.location+"-temp-graph", temp_graphData, tempGraphOptions);
-            })
-        }
+                })
+            }
 
-        if (fbHumid) {
-            fbHumid.orderByChild("ts").startAt(startTime).on("child_added", function(cs, prev) {
-                var ts = cs.val().ts * 1000;
-                var time = new Date(ts);
-                var humid = cs.val().humid;
-                //widget
-                updateHumidWidget(humid, time.toLocaleTimeString(), deviceInfo.agentID, humidSub);
-                //temp-humid graph
-                if( $("#"+deviceInfo.agentID+"-temp-humid-graph").length != 0 ) {
+            if (fbHumid) {
+                fbHumid.orderByChild("ts").startAt(tempHumidStartTime).on("child_added", function(cs, prev) {
+                    var ts = cs.val().ts * 1000;
+                    var time = new Date(ts);
+                    var humid = cs.val().humid;
+
+                    //temp-humid graph
                     tempHumid_graphData[1].data.push([ ts, humid ]);
                     if (tempHumid_graphData[1].data.length > 60) {
                         tempHumid_graphData[1].data.splice(0, tempHumid_graphData[1].data.length - 60);
                     }
-                    if (!tempHumid_graphData[0]) {
-                        tempHumid_graphData[0] = { label: "", data: [], yaxis: 1 }
-                    }
                     updateGraph("#"+deviceInfo.agentID+"-temp-humid-graph", tempHumid_graphData, tempHumidGraphOptions);
-                }
-            })
-        }
+                })
+            }
+        }, 300);
+
+        // temp & overview graph
+        setTimeout(function() {
+            // open listeners for graphs with sorted fb data
+            if (fbTemp) {
+                fbTemp.orderByChild("ts").startAt(tempStartTime).on("child_added", function(cs, prev) {
+                    var ts = cs.val().ts * 1000;
+                    var time = new Date(ts);
+                    var temp = cs.val().temp;
+
+                    //temp graph
+                    temp_graphData[tempIndex].data.push([ ts, temp ]);
+                    updateGraph( "#"+deviceInfo.location+"-temp-graph", temp_graphData, tempGraphOptions);
+                })
+            }
+        }, 1000);
+
     }
 
     function updateChannelSettings(e) {
@@ -1023,47 +1068,52 @@ $(document).ready(function() {
     // Gets current weather conditions for Los Altos from weather underground.
     // Get Data on a loop, and May want to store in FB so can graph with other data.
     function getLocalWeather() {
-        // $.ajax({
-        //     url : "http://api.wunderground.com/api/ab95457809980025/geolookup/conditions/q/CA/"+currentLocation+".json",
-        //     dataType : "jsonp",
-        //     success : function(parsed_json) {
-        //         var location = parsed_json['location']['city'];
-        //         var temp_c = parsed_json['current_observation']['temp_c'];
-        //         $(".local-forcast .dash-heading1").text(location);
-        //         $(".local-forcast h2").html((temp_c).toFixed() + "&deg C");
-        //         var time = new Date();
-        //         $(".local-forcast .time").text("updated @ " + time.toLocaleTimeString());
-        //     }
-        // });
+        $.ajax({
+            url : "http://api.wunderground.com/api/ab95457809980025/conditions/q/CA/"+currentLocation+".json",
+            dataType : "jsonp",
+            success : function(parsed_json) {
+                var location = parsed_json['current_observation']['display_location']["city"];
+                var temp_c = parsed_json['current_observation']['temp_c'];
+                var ts = parsed_json["current_observation"]["observation_epoch"] * 1000;
+
+                $(".local-forcast .dash-heading1").text(location);
+                $(".local-forcast h2").html((temp_c).toFixed() + "&deg C");
+                var time = new Date(ts);
+                $(".local-forcast .time").text("updated @ " + time.toLocaleTimeString());
+
+                graphWeatherData([ts, temp_c.toFixed()], false) // [ ts, temp ]
+            }
+        });
 
         // dummy data to post so not hitting api when developping
-        $(".local-forcast .dash-heading1").text("Los Altos");
-        $(".local-forcast h2").html("18&deg C");
-        var time = new Date();
-        $(".local-forcast .time").text("updated @ " + time.toLocaleTimeString());
+        // $(".local-forcast .dash-heading1").text("Los Altos");
+        // $(".local-forcast h2").html("18&deg C");
+        // var time = new Date();
+        // $(".local-forcast .time").text("updated @ " + time.toLocaleTimeString());
     }
 
-    //get yesterday first then it will get todays!!
-    function getHistoricalWeatherData(date_path, room, callback, weatherData) {
-        console.log(date_path)
+    //get yesterday first then it will get todays data (combined call tested and failed)
+    function getHistoricalWeatherData(date_path, callback, weatherData) {
         $.ajax({
             url : "http://api.wunderground.com/api/ab95457809980025/"+date_path+"/q/CA/"+currentLocation+".json",
             dataType : "jsonp",
             success : function(parsed_json) {
                 if (!weatherData && !callback) {
                     weatherData = collectWeatherAPIData(parsed_json);
-                    getHistoricalWeatherData( "history_" + createTodaysDateString(), room, graphWeatherData, weatherData);
+                    getHistoricalWeatherData( "history_" + createTodaysDateString(), graphWeatherData, weatherData);
                 } else if (weatherData) {
                     weatherData = collectWeatherAPIData(parsed_json, weatherData);
                 }
-                if (callback) { callback(room, weatherData)}
+                if (callback) {
+                    callback(weatherData, true)
+                }
             }
         });
     }
 
     function createTodaysDateString() {
         var date = new Date();
-        var month = date.getMonth() + 1; //js Date month is indexed from 0 not 1 (ie jan = 0)
+        var month = date.getMonth() + 1; // js Date month is indexed from 0 not 1 (ie jan = 0)
         var day = date.getDate();
         var year = date.getFullYear();
 
@@ -1075,7 +1125,6 @@ $(document).ready(function() {
 
     function collectWeatherAPIData(parsed_json, weatherData) {
         if (!weatherData) { weatherData = { "ovrData" : [], "areaData" : [] }; }
-        console.log(parsed_json["history"])
         var history = parsed_json['history']['observations'];
 
         for(var i = 0; i < history.length; i++) {
@@ -1087,9 +1136,6 @@ $(document).ready(function() {
             var areaStartTime = Date.now() - 21600000  // (-6h)
             var ovrStartTime = Date.now() - 86400000 // (-24h)
 
-            console.log(new Date(ts))
-            console.log(temp)
-
             if ( ts > ovrStartTime && ts < now ) {
                 weatherData.ovrData.push([ ts, temp ]);
             }
@@ -1100,41 +1146,51 @@ $(document).ready(function() {
         return weatherData;
     }
 
-    function graphWeatherData(room, weatherData) {
+    function graphWeatherData(weatherData, bulkData) {
+        var tempIndex, ovrIndex;
+        var room = findActiveSidebar();
+
         // area temp graph setup
-        tempGraphDataSets.push("Local Forcast");
-        var tempIndex = tempGraphDataSets.indexOf("Local Forcast");
-        temp_graphData[tempIndex] = { label: "Local Forcast", data: [] };
+        if (tempGraphDataSets.indexOf("Local Weather") === -1) {
+            tempGraphDataSets.push("Local Weather");
+            tempIndex = tempGraphDataSets.indexOf("Local Weather");
+            temp_graphData[tempIndex] = { label: "Local Weather", data: [] };
+        } else {
+            tempIndex = tempGraphDataSets.indexOf("Local Weather");
+        }
 
         // area temp graph plot data
         if ( $("#"+room+"-temp-graph").length == 0 ) {
             createTempGraph(room);
             addGraphToolTip(room, $("#"+room+"-temp-graph"), ["°C", "°C", "°C"]);
         }
-        temp_graphData[tempIndex].data = weatherData["areaData"];
-        updateGraph( "#openofficearea-temp-graph", temp_graphData, tempGraphOptions);
+        if (bulkData) {
+            weatherData["areaData"].forEach(function(datapoint) {
+                temp_graphData[tempIndex].data.push(datapoint); // [ ts, temp ]
+            })
+        } else {
+            temp_graphData[tempIndex].data.push(weatherData); // [ ts, temp ]
+        }
+        temp_graphData[tempIndex].data.sort(function(a, b) { return a[0] - b[0] } );
+        updateGraph( "#"+room+"-temp-graph", temp_graphData, tempGraphOptions);
 
         // overview temp graph setup
-        overviewGraphDataSets.push("Local Forcast");
-        var ovrIndex = overviewGraphDataSets.indexOf("Local Forcast");
-        overview_graphData[ovrIndex] = { label: "Local Forcast", data: [] };
-
-        overview_graphData[ovrIndex].data = weatherData["ovrData"];
+        if (overviewGraphDataSets.indexOf("Local Weather") === -1) {
+            overviewGraphDataSets.push("Local Weather");
+            ovrIndex = overviewGraphDataSets.indexOf("Local Weather");
+            overview_graphData[ovrIndex] = { label: "Local Weather", data: [] };
+        } else {
+            ovrIndex = overviewGraphDataSets.indexOf("Local Weather");
+        }
+        if(bulkData) {
+            weatherData["ovrData"].forEach(function(datapoint) {
+                overview_graphData[ovrIndex].data.push(datapoint); // [ ts, temp ]
+            })
+        } else {
+            overview_graphData[ovrIndex].data.push(weatherData); // [ ts, temp ]
+        }
+        overview_graphData[ovrIndex].data.sort(function(a, b) { return a[0] - b[0] } );
         updateGraph( "#office-overview-graph", overview_graphData, overviewGraphOptions);
     }
 
-    function getWeatherGraphData(room, callback) {
-        $.ajax({
-            url : "http://api.wunderground.com/api/ab95457809980025/history_" + createTodaysDateString() +"/yesterday/q/CA/"+currentLocation+".json",
-            dataType : "json",
-            success : function(parsed_json) {
-                var weatherData = collectWeatherAPIData(parsed_json);
-                if (callback) { callback(room, weatherData)}
-            }
-        });
-    }
-
 })
-
-
-

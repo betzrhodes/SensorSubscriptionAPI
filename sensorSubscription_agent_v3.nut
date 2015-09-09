@@ -1,458 +1,5 @@
-/******************** Rocky Classes ********************/
-class Rocky {
-    _handlers = null;
+#require "Bullwinkle.class.nut:1.0.0"
 
-    // Settings:
-    _timeout = 10;
-    _strictRouting = false;
-    _allowUnsecure = false;
-    _accessControl = true;
-
-    constructor(settings = {}) {
-        if ("timeout" in settings) _timeout = settings.timeout;
-        if ("allowUnsecure" in settings) _allowUnsecure = settings.allowUnsecure;
-        if ("strictRouting" in settings) _strictRouting = settings.strictRouting;
-        if ("accessControl" in settings) _accessConrol = settings.accessControl;
-
-        _handlers = {
-            authorize = _defaultAuthorizeHandler.bindenv(this),
-            onUnauthorized = _defaultUnauthorizedHandler.bindenv(this),
-            onTimeout = _defaultTimeoutHandler.bindenv(this),
-            onNotFound = _defaultNotFoundHandler.bindenv(this),
-            onException = _defaultExceptionHandler.bindenv(this),
-        };
-
-        http.onrequest(_onrequest.bindenv(this));
-    }
-
-    /************************** [ PUBLIC FUNCTIONS ] **************************/
-    function on(verb, signature, callback) {
-        // Register this signature and verb against the callback
-        verb = verb.toupper();
-        signature = signature.tolower();
-        if (!(signature in _handlers)) _handlers[signature] <- {};
-
-        local routeHandler = Rocky.Route(callback);
-        _handlers[signature][verb] <- routeHandler;
-
-        return routeHandler;
-    }
-
-    function post(signature, callback) {
-        return on("POST", signature, callback);
-    }
-
-    function get(signature, callback) {
-        return on("GET", signature, callback);
-    }
-
-    function put(signature, callback) {
-        return on("PUT", signature, callback);
-    }
-
-    function authorize(callback) {
-        _handlers.authorize <- callback;
-        return this;
-    }
-
-    function onUnauthorized(callback) {
-        _handlers.onUnauthorized <- callback;
-        return this;
-    }
-
-    function onTimeout(callback, timeout = 10) {
-        _handlers.onTimeout <- callback;
-        _timeout = timeout;
-        return this;
-    }
-
-    function onNotFound(callback) {
-        _handlers.onNotFound <- callback;
-        return this;
-    }
-
-    function onException(callback) {
-        _handlers.onException <- callback;
-        return this;
-    }
-
-    // Adds access control headers
-    function _addAccessControl(res) {
-        res.header("Access-Control-Allow-Origin", "*")
-        res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
-        res.header("Access-Control-Allow-Methods", "POST, PUT, GET, OPTIONS");
-    }
-
-    /************************** [ PRIVATE FUNCTIONS ] *************************/
-    function _onrequest(req, res) {
-
-        // Add access control headers if required
-        if (_accessControl) _addAccessControl(res);
-
-        // Setup the context for the callbacks
-        local context = Rocky.Context(req, res);
-
-        // Check for unsecure reqeusts
-        if (_allowUnsecure == false && "x-forwarded-proto" in req.headers && req.headers["x-forwarded-proto"] != "https") {
-            context.send(405, "HTTP not allowed.");
-            return;
-        }
-
-        // Parse the request body back into the body
-        try {
-            req.body = _parse_body(req);
-        } catch (e) {
-            server.log("Parse error '" + e + "' when parsing:\r\n" + req.body)
-            context.send(400, e);
-            return;
-        }
-
-        // Look for a handler for this path
-        local route = _handler_match(req);
-        if (route) {
-            // if we have a handler
-            context.path = route.path;
-            context.matches = route.matches;
-
-            // parse auth
-            context.auth = _parse_authorization(context);
-
-            // Create timeout
-            local onTimeout = _handlers.onTimeout;
-            local timeout = _timeout;
-
-            if (route.handler.hasTimeout()) {
-                onTimeout = route.handler.onTimeout;
-                timeout = route.handler.timeout;
-            }
-
-            context.setTimeout(_timeout, onTimeout);
-            route.handler.execute(context, _handlers);
-        } else {
-            // if we don't have a handler
-            _handlers.onNotFound(context);
-        }
-    }
-
-    function _parse_body(req) {
-        if ("content-type" in req.headers && req.headers["content-type"] == "application/json") {
-            if (req.body == "" || req.body == null) return null;
-            return http.jsondecode(req.body);
-        }
-        if ("content-type" in req.headers && req.headers["content-type"] == "application/x-www-form-urlencoded") {
-            return http.urldecode(req.body);
-        }
-        if ("content-type" in req.headers && req.headers["content-type"].slice(0,20) == "multipart/form-data;") {
-            local parts = [];
-            local boundary = req.headers["content-type"].slice(30);
-            local bindex = -1;
-            do {
-                bindex = req.body.find("--" + boundary + "\r\n", bindex+1);
-                if (bindex != null) {
-                    // Locate all the parts
-                    local hstart = bindex + boundary.len() + 4;
-                    local nstart = req.body.find("name=\"", hstart) + 6;
-                    local nfinish = req.body.find("\"", nstart);
-                    local fnstart = req.body.find("filename=\"", hstart) + 10;
-                    local fnfinish = req.body.find("\"", fnstart);
-                    local bstart = req.body.find("\r\n\r\n", hstart) + 4;
-                    local fstart = req.body.find("\r\n--" + boundary, bstart);
-
-                    // Pull out the parts as strings
-                    local headers = req.body.slice(hstart, bstart);
-                    local name = null;
-                    local filename = null;
-                    local type = null;
-                    foreach (header in split(headers, ";\n")) {
-                        local kv = split(header, ":=");
-                        if (kv.len() == 2) {
-                            switch (strip(kv[0]).tolower()) {
-                                case "name":
-                                    name = strip(kv[1]).slice(1, -1);
-                                    break;
-                                case "filename":
-                                    filename = strip(kv[1]).slice(1, -1);
-                                    break;
-                                case "content-type":
-                                    type = strip(kv[1]);
-                                    break;
-                            }
-                        }
-                    }
-                    local data = req.body.slice(bstart, fstart);
-                    local part = { "name": name, "filename": filename, "data": data, "content-type": type };
-
-                    parts.push(part);
-                }
-            } while (bindex != null);
-
-            return parts;
-        }
-
-        // Nothing matched, send back the original body
-        return req.body;
-    }
-
-    function _parse_authorization(context) {
-        if ("authorization" in context.req.headers) {
-            local auth = split(context.req.headers.authorization, " ");
-
-            if (auth.len() == 2 && auth[0] == "Basic") {
-                // Note the username and password can't have colons in them
-                local creds = http.base64decode(auth[1]).tostring();
-                creds = split(creds, ":");
-                if (creds.len() == 2) {
-                    return { authType = "Basic", user = creds[0], pass = creds[1] };
-                }
-            } else if (auth.len() == 2 && auth[0] == "Bearer") {
-                // The bearer is just the password
-                if (auth[1].len() > 0) {
-                    return { authType = "Bearer", user = auth[1], pass = auth[1] };
-                }
-            }
-        }
-
-        return { authType = "None", user = "", pass = "" };
-    }
-
-    function _extract_parts(routeHandler, path, regexp = null) {
-        local parts = { path = [], matches = [], handler = routeHandler };
-
-        // Split the path into parts
-        foreach (part in split(path, "/")) {
-            parts.path.push(part);
-        }
-
-        // Capture regular expression matches
-        if (regexp != null) {
-            local caps = regexp.capture(path);
-            local matches = [];
-            foreach (cap in caps) {
-                parts.matches.push(path.slice(cap.begin, cap.end));
-            }
-        }
-
-        return parts;
-    }
-
-    function _handler_match(req) {
-        local signature = req.path.tolower();
-        local verb = req.method.toupper();
-
-        // ignore trailing /s if _strictRouting == false
-        if(!_strictRouting) {
-            while (signature.len() > 1 && signature[signature.len()-1] == '/') {
-                signature = signature.slice(0, signature.len()-1);
-            }
-        }
-
-        if ((signature in _handlers) && (verb in _handlers[signature])) {
-            // We have an exact signature match
-            return _extract_parts(_handlers[signature][verb], signature);
-        } else if ((signature in _handlers) && ("*" in _handlers[signature])) {
-            // We have a partial signature match
-            return _extract_parts(_handlers[signature]["*"], signature);
-        } else {
-            // Let's iterate through all handlers and search for a regular expression match
-            foreach (_signature,_handler in _handlers) {
-                if (typeof _handler == "table") {
-                    foreach (_verb,_callback in _handler) {
-                        if (_verb == verb || _verb == "*") {
-                            try {
-                                local ex = regexp(_signature);
-                                if (ex.match(signature)) {
-                                    // We have a regexp handler match
-                                    return _extract_parts(_callback, signature, ex);
-                                }
-                            } catch (e) {
-                                // Don't care about invalid regexp.
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        return null;
-    }
-
-    /*************************** [ DEFAULT HANDLERS ] *************************/
-    function _defaultAuthorizeHandler(context) {
-        return true;
-    }
-
-    function _defaultUnauthorizedHandler(context) {
-        context.send(401, "Unauthorized");
-    }
-
-    function _defaultNotFoundHandler(context) {
-        context.send(404, format("No handler for %s %s", context.req.method, context.req.path));
-    }
-
-    function _defaultTimeoutHandler(context) {
-        context.send(500, format("Agent Request Timedout after %i seconds.", _timeout));
-    }
-
-    function _defaultExceptionHandler(context, ex) {
-        context.send(500, "Agent Error: " + ex);
-    }
-}
-class Rocky.Route {
-    handlers = null;
-    timeout = null;
-
-    _callback = null;
-
-    constructor(callback) {
-        handlers = {};
-        timeout = 10;
-
-        _callback = callback;
-    }
-
-    /************************** [ PUBLIC FUNCTIONS ] **************************/
-    function execute(context, defaultHandlers) {
-        try {
-            // setup handlers
-            foreach (handlerName, handler in defaultHandlers) {
-                if (!(handlerName in handlers)) handlers[handlerName] <- handler;
-            }
-
-            if(handlers.authorize(context)) {
-                _callback(context);
-            }
-            else {
-                handlers.onUnauthorized(context);
-            }
-        } catch(ex) {
-            handlers.onException(context, ex);
-        }
-    }
-
-    function authorize(callback) {
-        handlers.authorize <- callback;
-        return this;
-    }
-
-    function onException(callback) {
-        handlers.onException <- callback;
-        return this;
-    }
-
-    function onUnauthorized(callback) {
-        handlers.onUnauthorized <- callback;
-        return this;
-    }
-
-    function onTimeout(callback, t = 10) {
-        handlers.onTimeout <- callback;
-        timeout = t;
-        return this;
-    }
-
-    function hasTimeout() {
-        return ("onTimeout" in handlers);
-    }
-}
-class Rocky.Context {
-    req = null;
-    res = null;
-    sent = false;
-    id = null;
-    time = null;
-    auth = null;
-    path = null;
-    matches = null;
-    timer = null;
-    static _contexts = {};
-
-    constructor(_req, _res) {
-        req = _req;
-        res = _res;
-        sent = false;
-        time = date();
-
-        // Identify and store the context
-        do {
-            id = math.rand();
-        } while (id in _contexts);
-        _contexts[id] <- this;
-    }
-
-    /************************** [ PUBLIC FUNCTIONS ] **************************/
-    function get(id) {
-        if (id in _contexts) {
-            return _contexts[id];
-        } else {
-            return null;
-        }
-    }
-
-    function isbrowser() {
-        return (("accept" in req.headers) && (req.headers.accept.find("text/html") != null));
-    }
-
-    function getHeader(key, def = null) {
-        key = key.tolower();
-        if (key in req.headers) return req.headers[key];
-        else return def;
-    }
-
-    function setHeader(key, value) {
-        return res.header(key, value);
-    }
-
-    function send(code, message = null) {
-        // Cancel the timeout
-        if (timer) {
-            imp.cancelwakeup(timer);
-            timer = null;
-        }
-
-        // Remove the context from the store
-        if (id in _contexts) {
-            delete Rocky.Context._contexts[id];
-        }
-
-        // Has this context been closed already?
-        if (sent) {
-            return false;
-        }
-
-        if (message == null && typeof code == "integer") {
-            // Empty result code
-            res.send(code, "");
-        } else if (message == null && typeof code == "string") {
-            // No result code, assume 200
-            res.send(200, code);
-        } else if (message == null && (typeof code == "table" || typeof code == "array")) {
-            // No result code, assume 200 ... and encode a json object
-            res.header("Content-Type", "application/json; charset=utf-8");
-            res.send(200, http.jsonencode(code));
-        } else if (typeof code == "integer" && (typeof message == "table" || typeof message == "array")) {
-            // Encode a json object
-            res.header("Content-Type", "application/json; charset=utf-8");
-            res.send(code, http.jsonencode(message));
-        } else {
-            // Normal result
-            res.send(code, message);
-        }
-        sent = true;
-    }
-
-    function setTimeout(timeout, callback) {
-        // Set the timeout timer
-        if (timer) imp.cancelwakeup(timer);
-        timer = imp.wakeup(timeout, function() {
-            if (callback == null) {
-                send(502, "Timeout");
-            } else {
-                callback(this);
-            }
-        }.bindenv(this))
-    }
-}
-
-/****************** Firebase Classes *******************/
 class Firebase {
     // General
     db = null;              // the name of your firebase
@@ -980,866 +527,451 @@ class Firebase {
 
 }
 
-const FIREBASENAME = "impofficesensors";
-const FIREBASESECRET = "xN7NcUI76i0IN8t4Wlqj9BjnzEwmIS2OZabjjdJ8";
+// Class for Streaming Sensor Data
+// This class receives data from the device, and acts as a communication 
+//  layer for interacting with the device.
+// This class is dependent on bullwinkle class
+// This class has 1 required parameter, and 1 optional parameter when initialized
+    // 1st Parameter : instance of Bullwinkle
+    // 2nd Parameter (optional) : a callback function for handling data from device
+// This class has functions that 
+    // get reading interval
+    // get reporting interval
+    // get available subscriptions info
+    // get available subscrtiptions
+    // get active subscriptions
+    // get inactive subscriptions
+    
+    // update a reading interval (time between sensor readings in sec)
+    // update a reporting interval (time between connection to agent in sec)
+    // update broadcast callback
+    
+    // activate a subscription
+    // deactivate a subscription
+    // activate all subscriptions
+    // deactivate all subscriptions
+class SubscriptionManagerAgent {
+    _bullwinkle = null;
+    _broadcastCallback = null;
+    
+    _subscriptionSettings = null;
+    _settingsFlag = null;
+    
+    constructor(bullwinkle, broadcastCallback=null) {
+        _bullwinkle = bullwinkle;
+        _broadcastCallback = broadcastCallback ? broadcastCallback : _defaultBroadcast;
+        
+        _subscriptionSettings = _getStoredSubSettings();
+        _settingsFlag = false;
+        
+        _openListeners();
+    }
+    
+    // Get Settings
+    // Returns reading interval or null if no reading interval is not stored
+    function getReadingInterval() {
+        if("readingInterval" in _subscriptionSettings) {
+            return _subscriptionSettings.readingInterval;
+        } else {
+            return null;
+        }
+    }
+    
+    // Returns reporting interval or null if no reporting interval is not stored
+    function getReportingInterval() {
+        if("reportingInterval" in _subscriptionSettings) {
+            return _subscriptionSettings.reportingInterval;
+        } else {
+            return null;
+        }
+    }
+    
+    // Returns current settings for all subscriptions
+    function getSubscriptionsInfo() {
+        if("settings" in _subscriptionSettings) {
+            return _subscriptionSettings.settings;
+        } else {
+            return {};
+        }
+    }
+    
+    // Returns array of subscription names for all active subscriptions
+    function getActiveSubscriptions() {
+        local activeSubs = [];
+        if("settings" in _subscriptionSettings) {
+            foreach(sub, info in _subscriptionSettings.settings) {
+                if(_subscriptionSettings.settings[sub]["subscribedTo"] == true) {
+                    activeSubs.push(sub);
+                }
+            }
+        }
+        return activeSubs;
+    }
+    
+    function getInactiveSubscriptions() {
+        local inactiveSubs = [];
+        if("settings" in _subscriptionSettings) {
+            foreach(sub, info in _subscriptionSettings.settings) {
+                if(_subscriptionSettings.settings[sub]["subscribedTo"] == false) {
+                    inactiveSubs.push(sub);
+                }
+            }
+        }
+        return inactiveSubs;
+    }
+    
+    // Returns array of subscription names for all subscriptions
+    function getAvailableSubscriptions() {
+        local activeSubs = [];
+        if("settings" in _subscriptionSettings) {
+            foreach(sub, info in _subscriptionSettings.settings) {
+                activeSubs.push(sub);
+            }
+        }
+        return activeSubs;
+    }
+    
+    // Update Settings
+    // Updates reading interval in local table and server
+    function updateReadingInterval(newReadingInt) {
+        _subscriptionSettings.readingInterval <- newReadingInt;
+        _updateStoredSubSettings(_subscriptionSettings);
+        _settingsFlag = true;
+    }
+    
+    // Updates reporting interval in local table and server
+    function updateReportingInterval(newReportingInt) {
+        _subscriptionSettings.reportingInterval <- newReportingInt;
+        _updateStoredSubSettings(_subscriptionSettings);
+        _settingsFlag = true;
+    }
+    
+    // Sets broadcastCallback to function that is passed in
+    function updateBroadcastCallback(newCallback) {
+        _broadcastCallback = newCallback;
+    }
+    
+    
+    // Subscription Functions
+    function subscribe(subName) {
+        if(!_subscriptionSettings.settings[subName]["subscribedTo"]) {
+            _subscriptionSettings.settings[subName]["subscribedTo"] = true;
+            _updateStoredSubSettings(_subscriptionSettings);
+            _settingsFlag = true;
+        }
+    }
+    
+    function unsubscribe(subName) {
+        if(_subscriptionSettings.settings[subName]["subscribedTo"]) {
+            _subscriptionSettings.settings[subName]["subscribedTo"] = false;
+            _updateStoredSubSettings(_subscriptionSettings);
+            _settingsFlag = true;
+        }
+    }
+    
+    function subscribeToAll() {
+        foreach(sub in getAvailableSubscriptions()) {
+            _subscriptionSettings.settings[sub]["subscribedTo"] = true;
+        }
+        _updateStoredSubSettings(_subscriptionSettings);
+        _settingsFlag = true;
+    }
+    
+    function unsubscribeFromAll() {
+        foreach(sub in getAvailableSubscriptions()) {
+            _subscriptionSettings.settings[sub]["subscribedTo"] = false;
+        }
+        _updateStoredSubSettings(_subscriptionSettings);
+        _settingsFlag = true;
+    }
+    
+    ///////////////////////// Private Functions /////////////////////////
+    
+    // Opens bullwinkle settings and readings listeners
+    function _openListeners() {
+        _bullwinkle.on("getSubscriptionSettings", function(context) {
+            context.reply(_subscriptionSettings);
+        }.bindenv(this));
+
+        _bullwinkle.on("sendDefaultSubscriptionSettings", function(context) {
+            _subscriptionSettings = context.params;
+            _updateStoredSubSettings(_subscriptionSettings);
+            context.reply("OK");
+        }.bindenv(this));
+        
+        _bullwinkle.on("sendReadings", function(context) {
+            if(context.params) {
+                _broadcastCallback(null, context.params);
+            } else {
+                _broadcastCallback("No Data", null);
+            }
+            
+            if(_settingsFlag) {
+                context.reply(_subscriptionSettings);
+            } else {
+                context.reply("OK");
+            }
+        }.bindenv(this));
+        
+        _bullwinkle.on("receivedSettings", function(context) {
+            _settingsFlag = false;
+        }.bindenv(this));
+    }
+    
+    // Returns subscription settings stored on server or an empty table if no settings on server
+    function _getStoredSubSettings() {
+        local persist = server.load();
+        if ("subscriptionSettings" in persist) {
+            return persist.subscriptionSettings;
+        } else {
+            return {};
+        }
+    }
+    
+    // Stores new settings to server.subscriptionSettings
+    function _updateStoredSubSettings(newSettings) {
+        server.save({"subscriptionSettings" : newSettings});
+    }
+    
+    function _defaultBroadcast(err, data) {
+        if (err) { server.log(err); }
+        if (data) { 
+            foreach(sub, readings in data) {
+                server.log(sub + ": " + http.jsonencode(readings)); 
+            }
+        }
+    }
+    
+}
+    
+    
+// Class to handle communication between agent and Firebase
+// This class is customized to interact with a specific database & should not be reused
+// This class is dependent on Firebase Class
+// This class requires 2 parameters when initialized
+    // 1st Parameter : instance of Firebase
+    // 2nd Parameter : a table of callbacks for getting & setting subscription 
+    //  settings, and for subscribing & unsubscribing from subscriptions
+// This class has functions that 
+    // Store given settings to Firebase
+    // Store data to Firebase
+    // Use Firebase to track subscription status
+    // Update given settings in Firebase
+    // Listens for changes to Firebase and updates the agent/device with changes
+class FBManager {
+    _fb = null;
+    _subCallbacks = null;
+    _agentID = null;
+    _location = null;
+    
+    constructor(firebase, subCallbacks) {
+        _fb = firebase;
+        _subCallbacks = subCallbacks;
+        _agentID = split(http.agenturl(), "/").pop();
+        
+        _openListeners();
+    }
+
+    // Stores agent side settings to Firebase/settings
+    function storeSettings(readingInt, reportingInt, subSettings) {
+        updateFBSetting("readingInterval", readingInt);
+        updateFBSetting("reportingInterval", reportingInt);
+        foreach(sub, settings in subSettings) {
+            if("type" in settings) { 
+                updateFBSetting("subscriptionSettings/"+sub+"/type", settings.type);
+            }
+            if("channel" in settings) { 
+                updateFBSetting("subscriptionSettings/"+sub+"/channel", settings.channel);
+            }
+        }
+    }
+
+    // Stores agent side subscriptions to Firebase/locations
+    function storeSubcriptions(callback=null) {
+        if(_location) {
+            local activeSubs = _subCallbacks.getActiveSubs(); 
+            local inactiveSubs = _subCallbacks.getInactiveSubs();
+            local data = { "active": {}, "inactive": {} };
+        
+            foreach(sub in activeSubs) {
+                data.active[sub] = {"name" : sub, "widgets" : []};
+            }
+            foreach(sub in inactiveSubs) {
+                data.inactive[sub] = {"name" : sub, "widgets" : []};
+            }
+            
+            // Store subscriptions in Firebase locations node 
+            _fb.write("/settings/locations/"+_location+"/"+_agentID, data);
+        }
+        
+        if(callback) { callback(); }
+    }
+    
+    // Stores readings to Firebase/data
+    function storeReadings(err, data) {
+        if (err) { server.log(err); }
+        if (data && _location) { 
+            foreach(subcription, readings in data) {
+                _buildQue(subcription, readings, _writeQueToDB);
+            }
+        }
+    }
+    
+    // Updates Firebase/settings with data passed in
+    function updateFBSetting(settingNode, newSetting) {
+        _fb.write("/settings/devices/"+_agentID+"/"+settingNode, newSetting);
+    }
+    
+    
+    ////////////////////////////// Private Functions /////////////////////////
+    
+    // Sort readings by timestamp - make sure your timestamp label matches device code
+    function _buildQue(subscription, readings, callback) {
+        readings.sort(function (a, b) { return b.ts <=> a.ts });
+        callback(subscription, readings);
+    }
+    
+    // Loop that writes readings to db in order by timestamp
+    function _writeQueToDB(subscription, que) {
+        if (que.len() > 0) {
+            local reading = que.pop();
+            _fb.push("/data/"+_location+"/"+_agentID+"/"+subscription, reading, null, function(res) { _writeQueToDB(subscription, que); }.bindenv(this));
+        }
+    }
+    
+    // Updates subscriptions with response from FB locations listener
+    function _updateSubscriptions(path, res) {
+        if(res != null) {
+            local path = split(path, "/");
+            local editedNode = path.top();
+            
+            if(editedNode == _agentID) {
+                if("active" in res) {
+                    foreach(sub, info in res.active) {
+                        _subCallbacks.subscribe(sub);
+                    }                    
+                }
+                if("inactive" in res) {
+                    foreach(sub, info in res.inactive) {
+                        _subCallbacks.unsubscribe(sub);
+                    }
+                }
+            }
+            
+            if(editedNode == "active" && res != null) {
+                foreach(sub, info in res) {
+                    _subCallbacks.subscribe(sub);
+                }
+            }
+            if(editedNode == "inactive" && res != null) {
+                foreach(sub, info in res) {
+                    _subCallbacks.unsubscribe(sub);
+                }
+            }
+        }
+    }
+    
+    // Updates the location with response from FB devices listener
+    function _updateLocation(path, res) {
+        if(res == null && _location == null) {
+            // Device not in Dashboard. Send agent settings to Firebase.
+            _sendAgentSettings();
+            //unsubscribe from all
+            local subs = _subCallbacks.getActiveSubs();
+            foreach(sub in subs) {
+                _subCallbacks.unsubscribe(sub);
+            }
+        } else { 
+            // Device added to Dashboard. Set location & open listener
+            if(_location == null) {
+                _location = res;
+                _fb.on("/locations/"+_location+"/"+_agentID, _updateSubscriptions.bindenv(this));
+            }
+            // Location has changed. Update location and listeners
+            if(res != _location)  {
+                // Close listener on old location
+                _fb.on("/locations/"+_location+"/"+_agentID, null);
+                // update location
+                _location = res;
+                
+                // we deleted a device from the dashboard unsubscribe
+                if(_location == null) {
+                    //unsubscribe from all
+                    local subs = _subCallbacks.getActiveSubs();
+                    foreach(sub in subs) {
+                        _subCallbacks.unsubscribe(sub);
+                    }
+                // we moved a device to new location - open a listener for that location
+                } else {
+                    _fb.on("/locations/"+_location+"/"+_agentID, _updateSubscriptions.bindenv(this));
+                }
+            }
+        }
+    }
+    
+    // Updates FB with local settings
+    function _sendAgentSettings() {
+        storeSettings(_subCallbacks.getReading(), _subCallbacks.getReporting(), _subCallbacks.getSubsInfo());
+        if(_location) { storeSubcriptions(); }
+    }
+    
+    // Updates reading/reporting interval settings with response from FB settings listener
+    function _updateIntervals(path, res) {
+        local node = split(path, "/").pop();
+        local newSetting = {};
+        if (res && node == "readingInterval") {
+            newSetting.readingInterval <- res.tointeger();
+            server.log("updating Reading Interval to "+res);
+        }
+        if (res && node == "reportingInterval") {
+            newSetting.reportingInterval <- res.tointeger();
+            server.log("updating Reporting Interval to "+res);
+        }
+        _updateLocalSettings(newSetting);
+    }
+    
+    // Sets agent's reading/reporting interval to the settings passed in
+    function _updateLocalSettings(newSettings) {
+        if("readingInterval" in newSettings) { _subCallbacks.setReading(newSettings.readingInterval); }
+        if("reportingInterval" in newSettings) { _subCallbacks.setReporting(newSettings.reportingInterval); }
+    }
+    
+    // Opens Firebase listeners 
+    function _openListeners() {
+        _fb.stream("/settings", true);
+        
+        // listen for changes to reading and reporting intervals
+        _fb.on("/devices/"+_agentID+"/readingInterval", _updateIntervals.bindenv(this));
+        _fb.on("/devices/"+_agentID+"/reportingInterval", _updateIntervals.bindenv(this));
+        
+        // listen for changes to location
+        _fb.on("/devices/"+_agentID+"/location", _updateLocation.bindenv(this));
+    }
+
+}
+    
+/////////////////////////////  Run Time  ///////////////////////////////
+
+server.log("AGENT RUNNING");
+
+const FIREBASENAME = "noraofficesensors";
+const FIREBASESECRET = "Nvq5qcyxI5SI9ovPZQlMKpnRI2Q3zkg38BRj9DjV";
 
 firebase <- Firebase(FIREBASENAME, FIREBASESECRET);
-
-/******************** Bullwinkle Class *****************/
-class Bullwinkle {
-    _handlers = null;
-    _sessions = null;
-    _partner  = null;
-    _history  = null;
-    _timeout  = 10;
-    _retries  = 1;
-
-
-    // .........................................................................
-    constructor() {
-        const BULLWINKLE = "bullwinkle";
-
-        _handlers = { timeout = null, receive = null };
-        _partner  = is_agent() ? device : agent;
-        _sessions = { };
-        _history  = { };
-
-        // Incoming message handler
-        _partner.on(BULLWINKLE, _receive.bindenv(this));
-    }
-
-
-    // .........................................................................
-    function send(command, params = null) {
-
-        // Generate an unique id
-        local id = _generate_id();
-
-        // Create and store the session
-        _sessions[id] <- Bullwinkle_Session(this, id, _timeout, _retries);
-
-        return _sessions[id].send("send", command, params);
-    }
-
-
-    // .........................................................................
-    function ping() {
-
-        // Generate an unique id
-        local id = _generate_id();
-
-        // Create and store the session
-        _sessions[id] <- Bullwinkle_Session(this, id, _timeout, _retries);
-
-        // Send it
-        return _sessions[id].send("ping");
-    }
-
-
-    // .........................................................................
-    function is_agent() {
-        return (imp.environment() == ENVIRONMENT_AGENT);
-    }
-
-    // .........................................................................
-    static function _getCmdKey(cmd) {
-        return BULLWINKLE + "_" + cmd;
-    }
-
-    // .........................................................................
-    function on(command, callback) {
-        local cmdKey = Bullwinkle._getCmdKey(command);
-
-        if (cmdKey in _handlers) {
-            _handlers[cmdKey] = callback;
-        } else {
-            _handlers[cmdKey] <- callback
-        }
-    }
-    // .........................................................................
-    function onreceive(callback) {
-        _handlers.receive <- callback;
-    }
-
-
-    // .........................................................................
-    function ontimeout(callback, timeout = null) {
-        _handlers.timeout <- callback;
-        if (timeout != null) _timeout = timeout;
-    }
-
-
-    // .........................................................................
-    function set_timeout(timeout) {
-        _timeout = timeout;
-    }
-
-
-    // .........................................................................
-    function set_retries(retries) {
-        _retries = retries;
-    }
-
-
-    // .........................................................................
-    function _generate_id() {
-        // Generate an unique id
-        local id = null;
-        do {
-            id = math.rand();
-        } while (id in _sessions);
-        return id;
-    }
-
-    // .........................................................................
-    function _is_unique(context) {
-
-        // Clean out old id's from the history
-        local now = time();
-        foreach (id,t in _history) {
-            if (now - t > 100) {
-                delete _history[id];
-            }
-        }
-
-        // Check the current context for uniqueness
-        local id = context.id;
-        if (id in _history) {
-            return false;
-        } else {
-            _history[id] <- time();
-            return true;
-        }
-    }
-
-    // .........................................................................
-    function _clone_context(ocontext) {
-        local context = {};
-        foreach (k,v in ocontext) {
-            switch (k) {
-                case "type":
-                case "id":
-                case "time":
-                case "command":
-                case "params":
-                    context[k] <- v;
-            }
-        }
-        return context;
-    }
-
-
-    // .........................................................................
-    function _end_session(id) {
-        if (id in _sessions) {
-            delete _sessions[id];
-        }
-    }
-
-
-    // .........................................................................
-    function _receive(context) {
-        local id = context.id;
-        switch (context.type) {
-            case "send":
-            case "ping":
-                // build the command string
-                local cmdKey = Bullwinkle._getCmdKey(context.command);
-
-                // Immediately ack the message
-                local response = { type = "ack", id = id, time = Bullwinkle_Session._timestamp() };
-                if (!_handlers.receive && !_handlers[cmdKey]) {
-                    response.type = "nack";
-                }
-                _partner.send(BULLWINKLE, response);
-
-                // Then handed on to the callback
-                if (context.type == "send" && (_handlers.receive || _handlers[cmdKey]) && _is_unique(context)) {
-                    try {
-                        // Prepare a reply function for shipping a reply back to the sender
-                        context.reply <- function (reply) {
-                            local response = { type = "reply", id = id, time = Bullwinkle_Session._timestamp() };
-                            response.reply <- reply;
-                            _partner.send(BULLWINKLE, response);
-                        }.bindenv(this);
-
-                        // Fire the callback
-                        if (_handlers[cmdKey]) {
-                            _handlers[cmdKey](context);
-                        } else {
-                            _handlers.receive(context);
-                        }
-                    } catch (e) {
-                        // An unhandled exception should be sent back to the sender
-                        local response = { type = "exception", id = id, time = Bullwinkle_Session._timestamp() };
-                        response.exception <- e;
-                        _partner.send(BULLWINKLE, response);
-                    }
-                }
-                break;
-
-            case "nack":
-            case "ack":
-                // Pass this packet to the session handler
-                if (id in _sessions) {
-                    _sessions[id]._ack(context);
-                }
-                break;
-
-            case "reply":
-                // This is a reply for an sent message
-                if (id in _sessions) {
-                    _sessions[id]._reply(context);
-                }
-                break;
-
-            case "exception":
-                // Pass this packet to the session handler
-                if (id in _sessions) {
-                    _sessions[id]._exception(context);
-                }
-                break;
-
-            default:
-                throw "Unknown context type: " + context.type;
-
-        }
-    }
-
-}
-class Bullwinkle_Session {
-    _handlers = null;
-    _parent = null;
-    _context = null;
-    _timer = null;
-    _timeout = null;
-    _acked = false;
-    _retries = null;
-
-    // .........................................................................
-    constructor(parent, id, timeout = 0, retries = 1) {
-        _handlers = { ack = null, reply = null, timeout = null, exception = null };
-        _parent = parent;
-        _timeout = timeout;
-        _retries = retries;
-        _context = { time = _timestamp(), id = id };
-    }
-
-    // .........................................................................
-    function onack(callback) {
-        _handlers.ack = callback;
-        return this;
-    }
-
-    // .........................................................................
-    function onreply(callback) {
-        _handlers.reply = callback;
-        return this;
-    }
-
-    // .........................................................................
-    function ontimeout(callback) {
-        _handlers.timeout = callback;
-        return this;
-    }
-
-    // .........................................................................
-    function onexception(callback) {
-        _handlers.exception = callback;
-        return this;
-    }
-
-    // .........................................................................
-    function send(type = "resend", command = null, params = null) {
-
-        _retries--;
-
-        if (type != "resend") {
-            _context.type <- type;
-            _context.command <- command;
-            _context.params <- params;
-        }
-
-        if (_timeout > 0) _set_timer(_timeout);
-        _parent._partner.send(BULLWINKLE, _context);
-
-        return this;
-    }
-
-    // .........................................................................
-    function _set_timer(timeout) {
-
-        // Stop any current timers
-        _stop_timer();
-
-        // Start a fresh timer
-        _timer = imp.wakeup(_timeout, _ontimeout.bindenv(this));
-    }
-
-    // .........................................................................
-    function _ontimeout() {
-
-        // Close down the timer and session
-        _timer = null;
-
-        if (!_acked && _retries > 0) {
-            // Retry is required
-            send();
-        } else {
-            // Close off this dead session
-            _parent._end_session(_context.id)
-
-            // If we are still waiting for an ack, throw a callback
-            if (!_acked) {
-                _context.latency <- _timestamp_diff(_context.time, _timestamp());
-                if (_handlers.timeout) {
-                    // Send the context to the session timeout handler
-                    _handlers.timeout(_context);
-                } else if (_parent._handlers.timeout) {
-                    // Send the context to the global timeout handler
-                    _parent._handlers.timeout(_context);
-                }
-            }
-        }
-    }
-
-    // .........................................................................
-    function _stop_timer() {
-        if (_timer) imp.cancelwakeup(_timer);
-        _timer = null;
-    }
-
-    // .........................................................................
-    function _timestamp() {
-        if (Bullwinkle.is_agent()) {
-            local d = date();
-            return format("%d.%06d", d.time, d.usec);
-        } else {
-            local d = math.abs(hardware.micros());
-            return format("%d.%06d", d/1000000, d%1000000);
-        }
-    }
-
-
-    // .........................................................................
-    function _timestamp_diff(ts0, ts1) {
-        // server.log(ts0 + " > " + ts1)
-        local t0 = split(ts0, ".");
-        local t1 = split(ts1, ".");
-        local diff = (t1[0].tointeger() - t0[0].tointeger()) + (t1[1].tointeger() - t0[1].tointeger()) / 1000000.0;
-        return math.fabs(diff);
-    }
-
-
-    // .........................................................................
-    function _ack(context) {
-        // Restart the timeout timer
-        _set_timer(_timeout);
-
-        // Calculate the round trip latency and mark the session as acked
-        _context.latency <- _timestamp_diff(_context.time, _timestamp());
-        _acked = true;
-
-        // Fire a callback
-        if (_handlers.ack) {
-            _handlers.ack(_context);
-        }
-
-    }
-
-
-    // .........................................................................
-    function _reply(context) {
-        // We can stop the timeout timer now
-        _stop_timer();
-
-        // Fire a callback
-        if (_handlers.reply) {
-            _context.reply <- context.reply;
-            _handlers.reply(_context);
-        }
-
-        // Remove the history of this message
-        _parent._end_session(_context.id)
-    }
-
-
-    // .........................................................................
-    function _exception(context) {
-        // We can stop the timeout timer now
-        _stop_timer();
-
-        // Fire a callback
-        if (_handlers.exception) {
-            _context.exception <- context.exception;
-            _handlers.exception(_context);
-        }
-
-        // Remove the history of this message
-        _parent._end_session(_context.id)
-    }
-
-}
-
-//initialize Bullwinkle
 bullwinkle <- Bullwinkle();
-
-/******************** API Class ************************/
-class AgentSensorAPI {
-    _agentID = null;
-    _bullwinkle = null;
-    _sensorSettings = null;
-    _settingsChanged = false;
-    _broadcastCallback = null;
-
-    constructor(readingInterval, reportingInterval, bullwinkle, broadcastCallback=null) {
-        _agentID = split(http.agenturl(), "/").pop();
-        _bullwinkle = bullwinkle;
-        _broadcastCallback = broadcastCallback;
-        _sensorSettings = { "agentID" : _agentID,
-                            "reportingInterval" : reportingInterval,
-                            "readingInterval" : readingInterval,
-                            "channels" : [] };
-        init();
-    }
-
-    function init() {
-        _bullwinkle.on("getSettings", _sendSettings.bindenv(this));
-        _bullwinkle.on("sendData", function(context) { _broadcastData(context, _broadcastCallback) }.bindenv(this));
-        _bullwinkle.on("ack", _successfulCommunicationResponse.bindenv(this));
-    }
-
-    function configureChannel (type, availStreams=[], availEvents={}) {
-        if(typeof availStreams != "array" && typeof availStreams == "table") {
-            availEvents = availStreams;
-            availStreams = [];
-        }
-        if(typeof availEvents != "table" && typeof availEvents == "array") {
-            availStreams = availEvents;
-            availEvents = {};
-        }
-        if(typeof type == "string" && typeof availStreams == "array" && typeof availEvents == "table") {
-            local id = _sensorSettings.channels.len();
-            _sensorSettings.channels.push({ "channelID" : id,
-                                          "type" : type,
-                                          "active" : false,
-                                          "availableStreams" : availStreams,
-                                          "availableEvents" : availEvents,
-                                          "activeStreams" : [],
-                                          "activeEvents" : {} });
-        } else {
-            server.log("Parameters not of the correct type");
-        }
-    }
-
-    function setBroadcastCallback(callback) {
-        _broadcastCallback = callback;
-    }
-
-    function getChannels() {
-        return http.jsonencode(_sensorSettings);
-    }
-
-    // subscribe to 1, some, or all channel streams
-    // takes an array of channelIDs as a parameter (if no parameter then will subscribe to all channels)
-    function activateChannels(channelIDs=null) {
-        //if no channelID given create an array of all channelIDs
-        if(!channelIDs) { channelIDs = _createchannelIDArray(); }
-        foreach(cID in channelIDs) {
-            _sensorSettings.channels[cID].activeStreams = _sensorSettings.channels[cID].availableStreams;
-            //change status to active if it isn't
-            if( _sensorSettings.channels[cID].activeStreams.len() > 0 && !(_sensorSettings.channels[cID].active) ) {
-                _sensorSettings.channels[cID].active = true;
-            }
-            _settingsChanged = true;
-        }
-    }
-
-    //subscribe to a specific stream
-    function activateStream(channelID, stream) {
-        if(stream in _sensorSettings.channels[channelID].availableStreams) {
-            _sensorSettings.channels[channelID].activeStreams.push(stream);
-            _sensorSettings.channels[cID].active = true;
-            _settingsChanged = true;
-        }
-    }
-
-    // subscribe to specific event
-    // example parameters - (1, "sensorTail_themostat", {"low":20, "high":30})
-    // if no eventParams are passed in then default params for event will be used
-    function activateEvent(channelID, event, eventParams=null) {
-        if(event in _sensorSettings.channels[channelID].availableEvents) {
-            if(eventParams == null) { eventParams = _sensorSettings.channels[channelID].availableEvents[event] };
-            _sensorSettings.channels[channelID].activeEvents[event] <- eventParams;
-            _sensorSettings.channels[channelID].active = true;
-            _settingsChanged = true;
-        }
-    }
-
-    //subscribes to all streams & events with default settings
-    function activateAll() {
-        local channelIDs = _createchannelIDArray();
-        foreach(cID in channelIDs) {
-            _sensorSettings.channels[cID].activeStreams = _sensorSettings.channels[cID].availableStreams;
-            _sensorSettings.channels[cID].activeEvents = _sensorSettings.channels[cID].availableEvents;
-            //change status to active if it isn't
-            if( !(_sensorSettings.channels[cID].active) && (_sensorSettings.channels[cID].activeStreams.len() > 0 || _sensorSettings.channels[cID].activeEvents.len() > 0) ) {
-                _sensorSettings.channels[cID].active = true;
-            }
-            _settingsChanged = true;
-        }
-    }
-
-    //unsubscribes from all streams & events
-    function deactivateAll() {
-        local channelIDs = _createchannelIDArray();
-        foreach(cID in channelIDs) {
-            _sensorSettings.channels[cID].activeStreams = {};
-            _sensorSettings.channels[cID].activeEvents = {};
-            if(_sensorSettings.channels[cID].active) { _sensorSettings.channels[cID].active = false };
-            _settingsChanged = true;
-        }
-    }
-
-    // unsubscribe to 1, some, all channel streams
-    // takes an array of channelIDs as a parameter (if no parameter then will unsubscribe from all channel streams)
-    function deactivateChannels(channelIDs=null) {
-        if(!channelIDs) { channelIDs = _createchannelIDArray() };
-        foreach(cID in channelIDs) {
-            _sensorSettings.channels[cID].activeStreams = {};
-            if(_sensorSettings.channels[cID].active && _sensorSettings.channels[cID].activeStreams.len() == 0 && _sensorSettings.channels[cID].activeEvents.len() == 0) {
-                _sensorSettings.channels[cID].active = false;
-            }
-            _settingsChanged = true;
-        }
-    }
-
-    //unsubscribes from a specific stream
-    function deactivateStream(channelID, stream) {
-        if(stream in _sensorSettings.channels[channelID].activeStreams) {
-            _sensorSettings.channels[channelID].activeStreams.remove( _sensorSettings.channels[channelID].activeStreams.find(stream) );
-            if(_sensorSettings.channels[channelID].active && _sensorSettings.channels[channelID].activeStreams.len() == 0 && _sensorSettings.channels[channelID].activeEvents.len() == 0) {
-                _sensorSettings.channels[channelID].active = false;
-            }
-            _settingsChanged = true;
-        }
-    }
-
-    //unsubscribes from a specific event
-    function deactivateEvent(channelID, event) {
-        if(event in _sensorSettings.channels[channelID].activeEvents) {
-            _sensorSettings.channels[channelID].activeEvents.rawdelete(event);
-            if(_sensorSettings.channels[channelID].active && _sensorSettings.channels[channelID].activeStreams.len() == 0 && _sensorSettings.channels[channelID].activeEvents.len() == 0) {
-                _sensorSettings.channels[channelID].active = false;
-            }
-            _settingsChanged = true;
-        }
-    }
-
-    // change reporting interval for device
-    // this should be multiple of readingInterval
-    function updateReportingInterval(newReportInt) {
-        if(_sensorSettings.reportingInterval != newReportInt) {
-            _sensorSettings.reportingInterval = newReportInt;
-            _settingsChanged = true;
-        }
-    }
-
-    // changes the reading interval for device
-    // this should be a factor of reportingInterval
-    function updateReadingInterval(newReadInt) {
-        if(_sensorSettings.readingInterval != newReadInt) {
-            _sensorSettings.readingInterval = newReadInt;
-            _settingsChanged = true;
-        }
-    }
-
-    function updateEventParams(channelID, event, params) {
-        if(_sensorSettings["sensors"].len() > channelID && event in _sensorSettings["sensors"][channelID]["availableEvents"]) {
-            _sensorSettings["sensors"][channelID]["availableEvents"][event] = params;
-            _settingsChanged = true;
-        }
-    }
-
-    function _sendSettings(context) {
-        context.reply(_getActiveSensorSettings());
-    }
-
-    function _broadcastData(context, callback=null) {
-        // if settings have changed send new settings
-        _settingsChanged ? context.reply(_getActiveSensorSettings()) : context.reply(null);
-
-        if(context.params) { //we got data
-            if(callback) { callback(context.params) };
-        }
-    }
-
-    function _successfulCommunicationResponse(context) {
-        _settingsChanged = false;
-        context.reply("OK");
-    }
-
-    //builds table of active subscriptions to send to device
-    function _getActiveSensorSettings() {
-        local activeSensorSettings = { "reportingInterval" : _sensorSettings.reportingInterval,
-                                      "readingInterval" : _sensorSettings.readingInterval,
-                                      "subscriptions" : {} };
-        foreach(sensor in _sensorSettings.channels) {
-            if(sensor.active) {
-                if(sensor.activeStreams.len() > 0) {
-                    if (!("activeStreams" in activeSensorSettings["subscriptions"])) {
-                        activeSensorSettings["subscriptions"]["activeStreams"] <- [];
-                    }
-                    foreach(stream in sensor.activeStreams) {
-                        activeSensorSettings["subscriptions"]["activeStreams"].push(stream)
-                    }
-                }
-                if(sensor.activeEvents.len() > 0) {
-                    if (!("activeEvents" in activeSensorSettings["subscriptions"])) {
-                        activeSensorSettings["subscriptions"]["activeEvents"] <- {};
-                    }
-                    foreach(event, params in sensor.activeEvents){
-                        activeSensorSettings["subscriptions"]["activeEvents"][event] <- params;
-                    }
-                }
-            }
-        }
-        // server.log(http.jsonencode(activeSensorSettings))
-        return activeSensorSettings;
-    }
-
-    //helper for subscription events for all sensors
-    function _createchannelIDArray() {
-        local ids = [];
-            for (local i = 0; i < _sensorSettings.channels.len(); i++) {
-                ids.push(i);
-            }
-        return ids;
-    }
-}
-
-
-/******************* Initialize API ********************/
-
-//time in sec that the imp sleeps between data collection for streams
-readingInterval <- 15;
-
-//time in sec that the imp waits between connection to agent
-//this should be a multiple of the readingInterval
-reportingInterval <- 60;
-
-//initialize our communication class
-api <- AgentSensorAPI(readingInterval, reportingInterval, bullwinkle);
-
-
-/******************* Configure Channels ********************/
-/*  configure a channel
-    params -
-        string - description of sensor data type,
-        array - contains stream "command names"
-        table - keys are event "command names" : values are the parameters for event
-
-    notes - the "command names" need to match the device side "command names" in sensorSubscriptionFunctionsByCommand table
-          - parameters can be set up in any format so long as it matches the device side code you have written */
-api.configureChannel("temp", ["noraTemp_tempReadings"], {"noraTemp_thermostat" : {"low": 27, "high": 28}});
-api.configureChannel("tempHumid", ["noraTempHumid_tempReadings", "noraTempHumid_humidReadings"]);
-api.configureChannel("ambLight", ["noraAmbLight_lightReadings"]);
-
-/******************* API Firebase Integration for data streaming ***************/
-agentID <- split(http.agenturl(), "/").pop();
-
-/**** Set Up Firebase Listeners ****/
-function updateSettings(path, data) {
-    local path = split(path, "/")
-    local editedNode = path.top();
-
-    if(path.len() == 1 && data) {
-        //we just created an active or inactive route
-        foreach(item, info in data) {
-            updateChannel(editedNode, item, info)
-        }
-    }
-
-    if(path.len() == 2 && data) {
-        //we just updated a stream/event
-        updateChannel(path[0], editedNode, data);
-    }
-}
-
-function updateChannel(pNode, commandName, data) {
-    local channel = data.channelID.tointeger();
-    if (pNode.find("inactive") != null) {
-        if(pNode.find("Streams") != null) {
-            firebase.remove("settings/"+agentID+"/activeStreams/"+commandName);
-            api.deactivateStream(channel, commandName);
-        } else {
-            firebase.remove("settings/"+agentID+"/activeEvents/"+commandName);
-            api.deactivateEvent(channel, commandName);
-        }
-    } else {
-         if(pNode.find("Streams") != null) {
-             firebase.remove("settings/"+agentID+"/inactiveStreams/"+commandName);
-             api.activateStream(channel, commandName);
-        } else {
-            firebase.remove("settings/"+agentID+"/inactiveEvents/"+commandName);
-            api.activateEvent(channel, commandName);
-        }
-    }
-}
-
-function updateInterval(path, data) {
-    local node = split(path, "/").pop();
-    if (data && node == "readingInterval") {
-        api.updateReadingInterval(data.tointeger());
-        server.log("updating Reading Interval to "+data);
-    }
-    if (data && node == "reportingInterval") {
-        api.updateReportingInterval(data.tointeger());
-        server.log("updating Reporting Interval to "+data);
-    }
-}
-
-firebase.on("/inactiveEvents", updateSettings)
-firebase.on("/inactiveStreams", updateSettings)
-firebase.on("/activeEvents", updateSettings)
-firebase.on("/activeStreams", updateSettings)
-firebase.on("/readingInterval", updateInterval)
-firebase.on("/reportingInterval", updateInterval)
-
-firebase.stream("/settings/"+agentID, true);
-
-/**** Send Current Settings To Firebase ****/
-function writeSettingsToFB() {
-    firebase.remove("/settings/"+agentID);
-    local settings = http.jsondecode(api.getChannels());
-    firebase.update("/settings/"+agentID, {"reportingInterval" : settings.reportingInterval, "readingInterval" : settings.readingInterval});
-
-    foreach (channel in settings.channels) {
-        firebase.update("/settings/"+agentID+"/channels/"+channel.channelID, {"type" : channel.type});
-
-        foreach (stream in channel.availableStreams) {
-            if (channel.activeStreams.find(stream) == null) {
-                firebase.update("/settings/"+agentID+"/inactiveStreams/"+stream, {"channelID" : channel.channelID});
-            } else {
-                firebase.remove("/settings/"+agentID+"/inactiveStreams/"+stream);
-            }
-        }
-        foreach (event, params in channel.availableEvents) {
-            if (event in channel.activeEvents) {
-                firebase.remove("/settings/"+agentID+"/inactiveEvents/"+event);
-            } else {
-                firebase.update("/settings/"+agentID+"/inactiveEvents/"+event, {"channelID" : channel.channelID, "params" : params});
-            }
-        }
-        foreach (stream in channel.activeStreams) {
-            firebase.update("/settings/"+agentID+"/activeStreams/"+stream, {"channelID" : channel.channelID});
-            firebase.remove("/settings/"+agentID+"/inactiveStreams/"+stream);
-        }
-        foreach (event, params in channel.activeEvents) {
-            firebase.update("/settings/"+agentID+"/activeEvents/"+event, {"channelID" : channel.channelID, "params" : params});
-            firebase.remove("/settings/"+agentID+"/inactiveEvents/"+event);
-        }
-    }
-}
-
-/**** Handle Data From Device ****/
-
-//sort readings by timestamp - make sure your timestamp label matches device code
-function buildQue(stream, readings, location, callback) {
-    local que = [];
-    foreach (reading in readings) {
-        que.push(reading);
-    }
-    que.sort(function (a, b) { return b.ts <=> a.ts });
-    callback(stream, que, location);
-}
-
-//loop that writes readings to db in order by timestamp
-function writeQueToDB(stream, que, location) {
-    local reading;
-    if (que.len() > 0) {
-        reading = que.pop();
-        // server.log("Agent ID: "+agentid+" Temperature: "+reading.t+" Time: "+reading.ts+" Location: "+location);
-        firebase.push("/data/"+location+"/"+agentID+"/"+stream, reading, null, function(res) { writeQueToDB(stream, que, location) });
-    }
-}
-
-// Use #setBroadcastCallback from api class to parse data from device & write to firebase
-api.setBroadcastCallback(function(data) {
-    firebase.read("/devices/"+agentID+"/location", function(location){
-        foreach (stream, readings in data) {
-            buildQue(stream, readings, location, writeQueToDB);
-        }
-    });
-});
-
-
-
-
-/********************* RUN TIME TESTS ***************************/
-server.log("Agent Running");
-
-//subscribe to everything
-server.log(api.getChannels());
-api.activateChannels([2, 0])
-// api.activateEvent(0, "noraTemp_thermostat");
-server.log(api.getChannels());
-
-//call this anytime you make a change in the agent that wants to be pushed to firebase
-writeSettingsToFB();
-
-//change reading and reporting intervals
-imp.wakeup(50, function() {
-    api.updateReadingInterval(60);
-    api.updateReportingInterval(300);
-    writeSettingsToFB();
-}.bindenv(api));
-
-
-
-
-
-
-
-
-
-
-
-//data structure examples - these are for me-ignore!!!
-
-//agent to device table
-/*activeSensorSettings <- { "reportingInterval" : reportingInterval,
-                          "readingInterval" : readingInterval,
-                          "subscriptions" : { "activeStreams" : [ "SI7021_sensorTail_tempReadings" ],
-                                              "activeEvents" : {"SI7021_sensorTail_themostat" : {"low":20, "high":30} }
-                        }
-
-*/
-
-//device side nv table
-/*nv:   { envSensorTailData: {  "nextWakeUp": 1422306809,
-                                "nextConnection": 1422306864,
-                                "sensorReadings": { "sensorTail_tempReadings" : [ readings... ],
-                                                    "sensorTail_themostat" : [ readings... ] },
-                              },
-          envSensorTailSettings: {  readingInterval: 5,
-                                    reportingInterval: 60,
-                                    subscriptions: {
-                                        "activeStreams" : [ "sensorTail_tempReadings",
-                                                            "sensorTail_humidReadings"],
-                                        "activeEvents" : { "sensorTail_themostat" : {low: 20, high: 30} }
-                                    }
-                                 },
-          eventPins: {"pinE":null},
-          eventConfig: { "noraTemp_thermostat" : {"pin" : "pinE", "eventTriggerPolarity" : 0, "callback" : function(){ initializeTemp(); return noraTemp.readTempC();} },
-                     "nora_baro" : {"pin" : "pinA", "eventTriggerPolarity" : 1, "callback" : function(){server.log("barometer event")} },
-                     "nora_accel" : {"pin" : "pinB", "eventTriggerPolarity" : 1, "callback" : function(){server.log("accel event")} },
-                     "nora_mag" : {"pin" : "pinC", "eventTriggerPolarity" : 0, "callback" : function(){server.log("mag event")} },
-                     "nora_als" : {"pin" : "pinD", "eventTriggerPolarity" : 0, "callback" : function(){server.log("als event")} },
-                    }
-        }
-*/
-
-
-// _eventTracker = { "triggered" : false,
-//                       "events" : [] };
+sm <- SubscriptionManagerAgent(bullwinkle);
+
+subCallbacks <- { "getReading" : sm.getReadingInterval.bindenv(sm),
+                  "setReading" : sm.updateReadingInterval.bindenv(sm),
+                  "getReporting" : sm.getReportingInterval.bindenv(sm),
+                  "setReporting" : sm.updateReportingInterval.bindenv(sm),
+                  "getSubsInfo" : sm.getSubscriptionsInfo.bindenv(sm),
+                  "getActiveSubs" : sm.getActiveSubscriptions.bindenv(sm),
+                  "getInactiveSubs" : sm.getInactiveSubscriptions.bindenv(sm),
+                  "subscribe" : sm.subscribe.bindenv(sm),
+                  "unsubscribe" : sm.unsubscribe.bindenv(sm) }
+
+fb_mngr <- FBManager(firebase, subCallbacks);
+
+// set callback for dataStreams
+sm.updateBroadcastCallback (fb_mngr.storeReadings.bindenv(fb_mngr) );
